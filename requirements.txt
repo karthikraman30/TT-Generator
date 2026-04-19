@@ -1,0 +1,6 @@
+pandas
+openpyxl
+reportlab
+psycopg2-binary
+python-dotenv
+flask

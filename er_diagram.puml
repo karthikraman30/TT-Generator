@@ -1,0 +1,155 @@
+@startuml University_Timetable_ER_Diagram
+
+left to right direction
+
+skinparam entity {
+  BackgroundColor #FEFECE
+  BorderColor #2C3E50
+  FontSize 13
+}
+
+skinparam padding 4
+
+title University Timetable Generator - ER Diagram\n(Architecture & Database Design)
+
+entity "Faculty" as Faculty {
+  * **faculty_id** : INT <<PK>>
+  --
+  name : VARCHAR(100)
+  short_name : VARCHAR(20) <<UNIQUE>>
+  department : VARCHAR(100)
+  email : VARCHAR(150) <<UNIQUE>>
+  created_at : TIMESTAMP
+}
+
+entity "Course" as Course {
+  * **course_id** : INT <<PK>>
+  --
+  course_code : VARCHAR(20) <<UNIQUE>>
+  course_name : VARCHAR(150)
+  lecture_hrs : INT
+  tutorial_hrs : INT
+  practical_hrs : INT
+  credits : INT
+  ltpc : VARCHAR(15)
+  course_type : VARCHAR(30)
+  created_at : TIMESTAMP
+  ..
+  <<CHECK(course_type IN ('Core','Technical Elective','HASS Elective','Open Elective','Lab'))>>
+}
+
+entity "Faculty_Course_Map" as Faculty_Course_Map {
+  * **assignment_id** : INT <<PK>>
+  --
+  faculty_id : INT <<FK>>
+  course_id : INT <<FK>>
+  created_at : TIMESTAMP
+  ..
+  <<UNIQUE(faculty_id, course_id)>>
+}
+
+entity "Student_Batch" as Student_Batch {
+  * **batch_id** : INT <<PK>>
+  --
+  program_name : VARCHAR(50)
+  sub_batch : VARCHAR(80)
+  section : VARCHAR(20)
+  year : INT
+  headcount : INT
+  created_at : TIMESTAMP
+  ..
+  <<UNIQUE(sub_batch, section)>>
+  <<CHECK(headcount >= 0)>>
+}
+
+entity "Batch_Course_Map" as Batch_Course_Map {
+  * course_id : INT <<PK, FK>>
+  * batch_id : INT <<PK, FK>>
+}
+
+entity "Room" as Room {
+  * **room_id** : INT <<PK>>
+  --
+  room_number : VARCHAR(30) <<UNIQUE>>
+  room_type : VARCHAR(50)
+  capacity : INT
+  created_at : TIMESTAMP
+  ..
+  <<CHECK(capacity >= 0)>>
+}
+
+entity "Time_Slot" as Time_Slot {
+  * **slot_id** : INT <<PK>>
+  --
+  day_of_week : VARCHAR(15)
+  start_time : TIME
+  end_time : TIME
+  slot_group : VARCHAR(15)
+  ..
+  <<UNIQUE(day_of_week, start_time)>>
+  <<CHECK(day_of_week IN ('Monday'..'Friday'))>>
+  <<CHECK(end_time > start_time)>>
+}
+
+entity "Scheduling_Constraint" as Scheduling_Constraint {
+  * **constraint_id** : INT <<PK>>
+  --
+  constraint_name : VARCHAR(100) <<UNIQUE>>
+  constraint_type : VARCHAR(10)
+  scope : VARCHAR(20)
+  rule_description : TEXT
+  enforcement_level : VARCHAR(20)
+  is_active : BOOLEAN
+  parameters_json : JSONB
+  created_at : TIMESTAMP
+  ..
+  <<CHECK(constraint_type IN ('HARD','SOFT'))>>
+  <<CHECK(scope IN ('FACULTY','ROOM','BATCH','COURSE','GLOBAL'))>>
+  <<CHECK(enforcement_level IN ('DATABASE','APPLICATION','BOTH'))>>
+}
+
+entity "Master_Timetable" as Master_Timetable {
+  * **timetable_id** : INT <<PK>>
+  --
+  assignment_id : INT <<FK>>
+  batch_id : INT <<FK>>
+  room_id : INT <<FK>>
+  slot_id : INT <<FK>>
+  is_moved : BOOLEAN
+  original_slot_group : VARCHAR(15)
+  created_at : TIMESTAMP
+  ..
+  <<UNIQUE(batch_id, slot_id)>>
+  <<UNIQUE(room_id, slot_id)>>
+  <<UNIQUE(assignment_id, slot_id)>>
+}
+
+entity "Constraint_Violation_Log" as Constraint_Violation_Log {
+  * **violation_id** : INT <<PK>>
+  --
+  timetable_id : INT <<FK>>
+  constraint_id : INT <<FK>>
+  severity : VARCHAR(20)
+  violation_detail : TEXT
+  detected_at : TIMESTAMP
+  ..
+  <<CHECK(severity IN ('INFO','WARNING','ERROR','CRITICAL'))>>
+}
+
+' === Relationships ===
+
+Faculty ||--o{ Faculty_Course_Map : "authorized for"
+Course ||--o{ Faculty_Course_Map : "taught by"
+
+Course ||--o{ Batch_Course_Map : "requires"
+Student_Batch ||--o{ Batch_Course_Map : "enrolled in"
+
+Faculty_Course_Map ||--o{ Master_Timetable : "scheduled as"
+Student_Batch ||--o{ Master_Timetable : "attends"
+Room ||--o{ Master_Timetable : "hosts"
+Time_Slot ||--o{ Master_Timetable : "occurs during"
+
+Master_Timetable ||--o{ Constraint_Violation_Log : "violates"
+Scheduling_Constraint ||--o{ Constraint_Violation_Log : "defines"
+
+@enduml

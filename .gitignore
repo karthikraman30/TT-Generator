@@ -1,0 +1,8 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+Generated_EXCEL_MODE.*
+Generated_DB_MODE.*
+Generated_Master_Timetable.*
