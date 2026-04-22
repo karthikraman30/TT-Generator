@@ -211,6 +211,9 @@ class DBManager:
             room_count = 0
             for room in sorted(rooms):
                 capacity = ROOM_CAPACITIES.get(room, 0)
+                if capacity == 0:
+                    continue  # Explicitly skip any zero-capacity/dropped rooms (like LAB A-SF)
+                
                 self.cur.execute(
                     """INSERT INTO room (room_number, capacity)
                        VALUES (%s, %s)

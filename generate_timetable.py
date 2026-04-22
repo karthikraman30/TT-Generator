@@ -725,9 +725,15 @@ def assign_rooms(final_courses, slot_matrix):
                     else:
                         unchanged += 1
             else:
-                # No room big enough — keep original and flag it
-                used_rooms.add(original_room)
-                unchanged += len(clist)
+                # No room big enough. Check if original room was completely dropped.
+                if original_room and ROOM_CAPACITIES.get(original_room, 0) == 0:
+                    for c in clist:
+                        c['room'] = 'TBD'  # Explicitly erase the dropped room
+                    reassigned += len(clist)
+                else:
+                    # Keep original and flag it
+                    used_rooms.add(original_room)
+                    unchanged += len(clist)
 
     return reassigned, unchanged
 
