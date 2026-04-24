@@ -14,5 +14,8 @@ serviceAccountKey*.json
 # OS files
 .DS_Store
 
+# JetBrains IDE project files
+.idea/
+
 # Uploaded Excel files (via admin UI)
 uploads/

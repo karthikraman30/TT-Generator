@@ -1058,8 +1058,8 @@ def session_login():
                         'error': 'Firebase not configured on server'}), 500
 
     try:
-        # Verify the ID token with Firebase Admin SDK
-        decoded_token = firebase_auth.verify_id_token(id_token)
+        # Verify the ID token with Firebase Admin SDK (allow 60s clock skew)
+        decoded_token = firebase_auth.verify_id_token(id_token, clock_skew_seconds=60)
         uid = decoded_token['uid']
         email = decoded_token.get('email', '')
 
@@ -1103,8 +1103,9 @@ def session_login():
 
         return jsonify({'success': True, 'redirect': redirect_url})
 
-    except firebase_admin.exceptions.InvalidArgumentError:
-        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+    except firebase_admin.exceptions.InvalidArgumentError as e:
+        print(f"Token error: {e}", flush=True)
+        return jsonify({'success': False, 'error': f'Invalid token: {e}'}), 401
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
