@@ -128,25 +128,25 @@ def generate_faculty_pdf(db, faculty_short_name):
                         grouped[g_key] = []
                     
                     batch = e.get('sub_batch', '')
-                    sec = e.get('section', '')
-                    # Minimal shortening if desired, but let's keep original unless requested. The previous code did some replacements.
-                    # Actually let's keep the previous code's replacements just in case.
+                    sec = e.get('section', '').strip()
+                    sec_clean = sec[4:].strip() if sec.startswith('Sec ') else sec
+
                     batch_short = batch.replace('BTech Sem-II ', '').replace(
                         'BTech Sem-IV ', '').replace('BTech Sem-VI ', '')
                     batch_str = f"{batch_short}"
-                    if sec and sec != 'All':
-                        batch_str += f" (Sec {sec})"
+                    if sec_clean and sec_clean != 'All':
+                        batch_str += f" (Sec {sec_clean})"
                     
                     grouped[g_key].append(batch_str)
                 
                 lines = []
                 for (code, room), batches in grouped.items():
-                    batches_joined = ' | '.join(batches)
+                    batches_joined = ', '.join(batches)
                     lines.append(
-                        f'<b>{code}</b><br/>'
-                        f'{room} | {batches_joined}'
+                        f'<b>{code}</b> | {room}<br/>'
+                        f'{batches_joined}'
                     )
-                cell_text = '<br/>'.join(lines)
+                cell_text = '<br/><br/>'.join(lines)
             else:
                 cell_text = '<font color="#aaaaaa">—</font>'
             row.append(make_para(cell_text))

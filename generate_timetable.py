@@ -1232,8 +1232,10 @@ def export_pdf(final_courses, pdf_file, slot_matrix):
                         if key not in grouped:
                             grouped[key] = []
                         batch_str = f"{c['sub_batch']}"
-                        if c.get('row_sec') and c.get('row_sec') != 'All':
-                            batch_str += f" (Sec {c['row_sec']})"
+                        sec = c.get('row_sec', '').strip()
+                        sec_clean = sec[4:].strip() if sec.startswith('Sec ') else sec
+                        if sec_clean and sec_clean != 'All':
+                            batch_str += f" (Sec {sec_clean})"
                         grouped[key].append(batch_str)
                     
                     codes_list = []
@@ -1311,8 +1313,10 @@ def export_pdf(final_courses, pdf_file, slot_matrix):
                         if key not in grouped:
                             grouped[key] = []
                         batch_str = f"{c['sub_batch']}"
-                        if c.get('row_sec') and c.get('row_sec') != 'All':
-                            batch_str += f" (Sec {c['row_sec']})"
+                        sec = c.get('row_sec', '').strip()
+                        sec_clean = sec[4:].strip() if sec.startswith('Sec ') else sec
+                        if sec_clean and sec_clean != 'All':
+                            batch_str += f" (Sec {sec_clean})"
                         grouped[key].append(batch_str)
                     
                     codes_list = []

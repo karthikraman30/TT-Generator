@@ -1951,8 +1951,10 @@ def admin_faculty():
                         grouped[g_key] = []
                     
                     batch_str = f"{e.get('sub_batch', '')}"
-                    if e.get('section', '') and e.get('section', '') != 'All':
-                        batch_str += f" (Sec {e.get('section', '')})"
+                    sec = e.get('section', '').strip()
+                    sec_clean = sec[4:].strip() if sec.startswith('Sec ') else sec
+                    if sec_clean and sec_clean != 'All':
+                        batch_str += f" (Sec {sec_clean})"
                     grouped[g_key].append(batch_str)
                 
                 for (code, fac, room), batches in grouped.items():
