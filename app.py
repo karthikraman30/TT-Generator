@@ -1911,6 +1911,70 @@ def admin_faculty():
         sel = 'selected' if f == selected_faculty else ''
         fac_options += f'<option value="{f}" {sel}>{f}</option>'
 
+    days_list = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    periods = ['08:00', '09:00', '10:00', '11:00', '12:00']
+    period_labels = ['8:00 – 8:50', '9:00 – 9:50', '10:00 – 10:50',
+                     '11:00 – 11:50', '12:00 – 12:50']
+
+    # Build schedule dict keyed by (day, time_prefix)
+    schedule = {}
+    for e in entries:
+        day = e.get('day_of_week', '')
+        start = str(e.get('start_time', ''))[:5]
+        key = (day, start)
+        if key not in schedule:
+            schedule[key] = []
+        schedule[key].append(e)
+
+    # Build grid HTML
+    grid_html = '<div class="master-grid">'
+    # Header row
+    grid_html += '<div class="mg-header"></div>'
+    for day in days_list:
+        grid_html += f'<div class="mg-header">{day}</div>'
+
+    # Data rows
+    for p_idx, period in enumerate(periods):
+        grid_html += f'<div class="mg-time">{period_labels[p_idx]}</div>'
+        for day in days_list:
+            cell_entries = schedule.get((day, period), [])
+            if cell_entries:
+                cell_html = ''
+                # Group by (course_code, faculty) to combine batches
+                grouped = {}
+                for e in cell_entries:
+                    code = e.get('course_code', '?')
+                    fac = e.get('faculty', '')
+                    room = e.get('room_number', '') or '-'
+                    g_key = (code, fac, room)
+                    if g_key not in grouped:
+                        grouped[g_key] = []
+                    
+                    batch_str = f"{e.get('sub_batch', '')}"
+                    if e.get('section', '') and e.get('section', '') != 'All':
+                        batch_str += f" (Sec {e.get('section', '')})"
+                    grouped[g_key].append(batch_str)
+                
+                for (code, fac, room), batches in grouped.items():
+                    # Check if it's a core or elective
+                    # (Faculty view might not have course_type, we can just style it generically or check if any original entry has it)
+                    # For simplicity, just use the core style or generic style.
+                    # We'll use a generic faculty class
+                    batches_joined = ', '.join(batches)
+                    fac_display = f"👤 {fac}" if not selected_faculty else "" # Hide faculty name if already filtered for them, or show if ALL
+                    
+                    cell_html += f'''<div class="cell-entry">
+                        <div><span class="ce-code">{code}</span></div>
+                        {f'<div class="ce-faculty">{fac_display}</div>' if fac_display else ''}
+                        <div class="ce-room">📍 {room}</div>
+                        <div class="ce-batch" style="white-space: normal;">{batches_joined}</div>
+                    </div>'''
+                grid_html += f'<div class="mg-cell">{cell_html}</div>'
+            else:
+                grid_html += '<div class="mg-cell mg-cell-empty">—</div>'
+    grid_html += '</div>'
+
+
     rows_html = ''
     for e in entries:
         rows_html += f'''
@@ -1935,28 +1999,52 @@ def admin_faculty():
     <p class="subtitle">Individual teaching schedules for all faculty members</p>
 
     <form class="filters" method="GET" action="{url_for("admin_faculty")}">
-        <div class="filter-group"><label>Faculty</label><select name="faculty">{fac_options}</select></div>
-        <button type="submit" class="btn">Filter</button>
+        <div class="filter-group"><label>Faculty</label>
+        <select name="faculty" onchange="this.form.submit()" style="background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding:0.5rem;border-radius:6px;min-width:200px;">
+        {fac_options}
+        </select>
+        </div>
+        <noscript><button type="submit" class="btn">Filter</button></noscript>
     </form>
 
-    <div class="table-container">
-        <div class="table-header">
-            <h2>Teaching Schedule</h2>
-            <span class="table-count">{len(entries)} sessions</span>
-        </div>
-        <div class="table-scroll">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Faculty</th><th>Day</th><th>Time</th>
-                        <th>Course Code</th><th>Course Name</th>
-                        <th>Batch</th><th>Section</th><th>Room</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
+    <div class="view-toggle">
+        <button class="active" onclick="showView('grid', this)">📊 Grid View</button>
+        <button onclick="showView('table', this)">📋 List View</button>
+    </div>
+
+    <div id="view-grid">
+        {grid_html}
+    </div>
+
+    <div id="view-table" style="display:none;">
+        <div class="table-container">
+            <div class="table-header">
+                <h2>Teaching Schedule</h2>
+                <span class="table-count">{len(entries)} sessions</span>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Faculty</th><th>Day</th><th>Time</th>
+                            <th>Course Code</th><th>Course Name</th>
+                            <th>Batch</th><th>Section</th><th>Room</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </div>
         </div>
     </div>
+    
+    <script>
+    function showView(view, btn) {{
+        document.getElementById('view-grid').style.display = view === 'grid' ? 'block' : 'none';
+        document.getElementById('view-table').style.display = view === 'table' ? 'block' : 'none';
+        document.querySelectorAll('.view-toggle button').forEach(function(b) {{ b.classList.remove('active'); }});
+        btn.classList.add('active');
+    }}
+    </script>
     '''
 
     return page_shell('Faculty Schedule', get_current_user(), 'faculty', content)

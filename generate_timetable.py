@@ -1226,9 +1226,28 @@ def export_pdf(final_courses, pdf_file, slot_matrix):
                       if c['faculty'] == fac and c['final_slot'] == curr_slot]
                 if mc:
                     deduped = dedup_courses(mc)
-                    codes = ', '.join(c['course_code'] for c in deduped)
-                    batches = ', '.join(c['sub_batch'] for c in deduped)
-                    rooms = ', '.join(c['room'] for c in deduped)
+                    grouped = {}
+                    for c in deduped:
+                        key = (c['course_code'], c['room'])
+                        if key not in grouped:
+                            grouped[key] = []
+                        batch_str = f"{c['sub_batch']}"
+                        if c.get('row_sec') and c.get('row_sec') != 'All':
+                            batch_str += f" (Sec {c['row_sec']})"
+                        grouped[key].append(batch_str)
+                    
+                    codes_list = []
+                    batches_list = []
+                    rooms_list = []
+                    for (code, room), batch_list in grouped.items():
+                        codes_list.append(code)
+                        batches_list.append(', '.join(batch_list))
+                        rooms_list.append(room)
+
+                    codes = ' | '.join(codes_list)
+                    batches = ' | '.join(batches_list)
+                    rooms = ' | '.join(rooms_list)
+                    
                     row.extend([
                         make_para(codes), make_para(batches), make_para(rooms)])
                 else:
@@ -1286,9 +1305,28 @@ def export_pdf(final_courses, pdf_file, slot_matrix):
                       if c['room'] == room and c['final_slot'] == curr_slot]
                 if mc:
                     deduped = dedup_courses(mc)
-                    codes = ', '.join(c['course_code'] for c in deduped)
-                    batches = ', '.join(c['sub_batch'] for c in deduped)
-                    facs = ', '.join(c['faculty'] for c in deduped)
+                    grouped = {}
+                    for c in deduped:
+                        key = (c['course_code'], c['faculty'])
+                        if key not in grouped:
+                            grouped[key] = []
+                        batch_str = f"{c['sub_batch']}"
+                        if c.get('row_sec') and c.get('row_sec') != 'All':
+                            batch_str += f" (Sec {c['row_sec']})"
+                        grouped[key].append(batch_str)
+                    
+                    codes_list = []
+                    batches_list = []
+                    facs_list = []
+                    for (code, fac), batch_list in grouped.items():
+                        codes_list.append(code)
+                        batches_list.append(', '.join(batch_list))
+                        facs_list.append(fac)
+
+                    codes = ' | '.join(codes_list)
+                    batches = ' | '.join(batches_list)
+                    facs = ' | '.join(facs_list)
+                    
                     row.extend([
                         make_para(codes), make_para(batches), make_para(facs)])
                 else:
