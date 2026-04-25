@@ -21,7 +21,10 @@
 <div class="card">
     <div class="card-header">
         <span class="card-title">Courses {% if active_semester %}— {{ active_semester.name }}{% endif %}</span>
-        <span class="badge badge-info">{{ courses|length }} courses</span>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+            <span class="badge badge-info">{{ courses|length }} courses</span>
+            <button class="btn btn-sm btn-primary" onclick="document.getElementById('add-course-modal').style.display='flex'">+ Add Course</button>
+        </div>
     </div>
     <div class="table-wrapper">
         <table>
@@ -100,6 +103,73 @@
             {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Add Course Modal -->
+<div id="add-course-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg, #fff);border-radius:12px;padding:1.5rem;max-width:520px;width:95%;box-shadow:0 8px 32px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
+        <h3 style="margin:0 0 1rem 0;font-size:1rem;">📚 Add Course Manually</h3>
+        <form action="{{ url_for('admin.add_course') }}" method="POST">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Course Code *</label>
+                    <input type="text" name="code" placeholder="e.g. IT301" required style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Course Name *</label>
+                    <input type="text" name="name" placeholder="e.g. Data Structures" required style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">L (Lectures/week)</label>
+                    <input type="number" name="lectures" value="3" min="0" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">T (Tutorials/week)</label>
+                    <input type="number" name="tutorials" value="0" min="0" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">P (Practicals/week)</label>
+                    <input type="number" name="practicals" value="0" min="0" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Credits</label>
+                    <input type="number" name="credits" value="3" min="0" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Type</label>
+                    <select name="course_type" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                        <option value="Core">Core</option>
+                        <option value="Elective">Elective</option>
+                        <option value="Open Elective">Open Elective</option>
+                        <option value="Lab">Lab</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Required Seats</label>
+                    <input type="number" name="capacity_override" placeholder="Auto" min="1" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Assign to Slot</label>
+                    <select name="slot_id" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                        <option value="">— None —</option>
+                        {% if active_semester %}
+                        {% for s in active_semester.slots.all() %}
+                        <option value="{{ s.id }}">{{ s.slot_label }}</option>
+                        {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;font-weight:600;">Faculty (Abbreviation)</label>
+                    <input type="text" name="faculty_abbr" placeholder="e.g. PMJ" style="width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;">
+                </div>
+            </div>
+            <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem;">
+                <button type="button" class="btn btn-sm" onclick="document.getElementById('add-course-modal').style.display='none'" style="background:rgba(160,174,192,0.2);color:var(--text-secondary);">Cancel</button>
+                <button type="submit" class="btn btn-sm btn-primary">Add Course</button>
+            </div>
+        </form>
     </div>
 </div>
 

@@ -6,8 +6,7 @@ Full CRUD for all entities, file uploads, schedule generation, and violation log
 import os
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, make_response
 from models import db, Program, Semester, Batch, Faculty, Room, Course, Slot, SlotCourse, \
-    CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, TimeSlot, \
-    FacultyNameMap, BatchOverlapRule, LTrimmingOverride
+    CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, TimeSlot
 from routes.auth import admin_required
 
 admin_bp = Blueprint('admin', __name__)
@@ -17,17 +16,20 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/')
 @admin_required
 def dashboard():
-    """Admin dashboard with overview stats."""
+    """Admin dashboard with overview stats filtered by active semester."""
+    active_semester = Semester.query.filter_by(is_active=True).first()
+    sid = active_semester.id if active_semester else None
+
     stats = {
         'semesters': Semester.query.count(),
         'programs': Program.query.count(),
-        'batches': Batch.query.count(),
+        'batches': Batch.query.filter_by(semester_id=sid).count() if sid else 0,
         'faculty': Faculty.query.count(),
         'rooms': Room.query.count(),
-        'courses': Course.query.count(),
-        'violations': SchedulingViolation.query.filter_by(resolved=False).count(),
+        'courses': Course.query.filter_by(semester_id=sid).count() if sid else 0,
+        'entries': TimetableEntry.query.filter_by(semester_id=sid).count() if sid else 0,
+        'violations': SchedulingViolation.query.filter_by(semester_id=sid, resolved=False).count() if sid else 0,
     }
-    active_semester = Semester.query.filter_by(is_active=True).first()
     return render_template('admin/dashboard.html', stats=stats, active_semester=active_semester)
 
 
@@ -36,7 +38,7 @@ def dashboard():
 @admin_required
 def semesters():
     """List all semesters."""
-    all_semesters = Semester.query.order_by(Semester.academic_year.desc(), Semester.season).all()
+    all_semesters = Semester.query.order_by(Semester.start_date.desc()).all()
     return render_template('admin/semesters.html', semesters=all_semesters)
 
 
@@ -44,23 +46,36 @@ def semesters():
 @admin_required
 def add_semester():
     """Create a new semester."""
-    name = request.form.get('name', '').strip()
-    academic_year = request.form.get('academic_year', '').strip()
-    season = request.form.get('season', '').strip()
+    from datetime import date as dt_date
 
-    if not all([name, academic_year, season]):
+    name = request.form.get('name', '').strip()
+    start_date_str = request.form.get('start_date', '').strip()
+    end_date_str = request.form.get('end_date', '').strip()
+
+    if not all([name, start_date_str, end_date_str]):
         flash('All fields are required.', 'error')
         return redirect(url_for('admin.semesters'))
 
-    existing = Semester.query.filter_by(academic_year=academic_year, season=season).first()
-    if existing:
-        flash('This semester already exists.', 'error')
+    try:
+        start_date = dt_date.fromisoformat(start_date_str)
+        end_date = dt_date.fromisoformat(end_date_str)
+    except ValueError:
+        flash('Invalid date format. Use YYYY-MM-DD.', 'error')
         return redirect(url_for('admin.semesters'))
 
-    sem = Semester(name=name, academic_year=academic_year, season=season)
+    if end_date <= start_date:
+        flash('End date must be after start date.', 'error')
+        return redirect(url_for('admin.semesters'))
+
+    existing = Semester.query.filter_by(name=name).first()
+    if existing:
+        flash('A semester with this name already exists.', 'error')
+        return redirect(url_for('admin.semesters'))
+
+    sem = Semester(name=name, start_date=start_date, end_date=end_date)
     db.session.add(sem)
     db.session.commit()
-    flash(f'Semester "{name}" created.', 'success')
+    flash(f'Semester "{name}" created ({start_date} to {end_date}).', 'success')
     return redirect(url_for('admin.semesters'))
 
 
@@ -265,6 +280,69 @@ def bulk_set_capacity():
     flash(f'Updated capacity for {updated} courses.', 'success')
     return redirect(url_for('admin.courses'))
 
+
+@admin_bp.route('/courses/add', methods=['POST'])
+@admin_required
+def add_course():
+    """Manually add a course to the active semester."""
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        flash('No active semester. Activate one first.', 'error')
+        return redirect(url_for('admin.courses'))
+
+    code = request.form.get('code', '').strip()
+    name = request.form.get('name', '').strip()
+    lectures = request.form.get('lectures', '0').strip()
+    tutorials = request.form.get('tutorials', '0').strip()
+    practicals = request.form.get('practicals', '0').strip()
+    credits = request.form.get('credits', '0').strip()
+    course_type = request.form.get('course_type', 'Core').strip()
+    slot_id = request.form.get('slot_id', '').strip()
+    faculty_abbr = request.form.get('faculty_abbr', '').strip().upper()
+    capacity = request.form.get('capacity_override', '').strip()
+
+    if not code or not name:
+        flash('Course code and name are required.', 'error')
+        return redirect(url_for('admin.courses'))
+
+    # Check for duplicates
+    existing = Course.query.filter_by(code=code, name=name, semester_id=active.id).first()
+    if existing:
+        flash(f'Course {code} "{name}" already exists in this semester.', 'error')
+        return redirect(url_for('admin.courses'))
+
+    course = Course(
+        code=code,
+        name=name,
+        semester_id=active.id,
+        lectures_per_week=int(lectures) if lectures.isdigit() else 0,
+        tutorials_per_week=int(tutorials) if tutorials.isdigit() else 0,
+        practicals_per_week=int(practicals) if practicals.isdigit() else 0,
+        credits=int(credits) if credits.isdigit() else 0,
+        course_type=course_type,
+        capacity_override=int(capacity) if capacity and capacity.isdigit() else None,
+    )
+    db.session.add(course)
+    db.session.flush()  # get course.id
+
+    # Assign to slot if provided
+    if slot_id and slot_id.isdigit():
+        slot = Slot.query.get(int(slot_id))
+        if slot:
+            sc = SlotCourse(slot_id=slot.id, course_id=course.id)
+            db.session.add(sc)
+
+    # Link faculty if provided
+    if faculty_abbr:
+        fac = Faculty.query.filter_by(abbreviation=faculty_abbr).first()
+        if fac:
+            cf = CourseFaculty(course_id=course.id, faculty_id=fac.id)
+            db.session.add(cf)
+
+    db.session.commit()
+    flash(f'Course {code} "{name}" added successfully.', 'success')
+    return redirect(url_for('admin.courses'))
+
 # ─── BATCHES ─────────────────────────────────────────────────
 @admin_bp.route('/batches')
 @admin_required
@@ -344,6 +422,10 @@ def upload():
                 from services.excel_parser import parse_section_strengths
                 result = parse_section_strengths(filepath)
                 flash(f'Section strengths processed: {result}', 'success')
+            elif upload_type == 'course_strengths':
+                from services.excel_parser import parse_course_strengths
+                result = parse_course_strengths(filepath)
+                flash(f'Course strengths processed: {result}', 'success')
             else:
                 flash('Unknown upload type.', 'error')
         except Exception as e:
@@ -493,138 +575,7 @@ def swap_slots():
     return redirect(url_for('admin.slot_grid'))
 
 
-# ─── CONFIGURATION PAGE ─────────────────────────────────────
-@admin_bp.route('/configuration')
-@admin_required
-def configuration():
-    """Admin configuration: rooms, overlaps, L-trimming, faculty names."""
-    active = Semester.query.filter_by(is_active=True).first()
-    rooms = Room.query.order_by(Room.capacity.desc()).all()
-    overlaps = BatchOverlapRule.query.order_by(BatchOverlapRule.id).all()
-    l_overrides = []
-    fac_names = []
 
-    if active:
-        l_overrides = LTrimmingOverride.query.filter_by(semester_id=active.id).all()
-    fac_names = db.session.query(FacultyNameMap).order_by(FacultyNameMap.abbreviation).all()
-
-    return render_template('admin/configuration.html',
-                           rooms=rooms, overlaps=overlaps,
-                           l_overrides=l_overrides, fac_names=fac_names,
-                           active_semester=active)
-
-
-# ─── L-TRIMMING CRUD ────────────────────────────────────────
-@admin_bp.route('/api/config/ltrim', methods=['POST'])
-@admin_required
-def api_config_ltrim():
-    """Add or update an L-trimming override."""
-    data = request.get_json()
-    code = data.get('course_code', '').strip()
-    keep_days_raw = data.get('keep_days', [])
-    if isinstance(keep_days_raw, str):
-        keep_days_raw = [d.strip() for d in keep_days_raw.split(',') if d.strip()]
-
-    active = Semester.query.filter_by(is_active=True).first()
-    if not active:
-        return jsonify({'success': False, 'error': 'No active semester'}), 400
-
-    valid_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'}
-    for d in keep_days_raw:
-        if d not in valid_days:
-            return jsonify({'success': False, 'error': f'Invalid day: {d}'}), 400
-
-    if not code or not keep_days_raw:
-        return jsonify({'success': False, 'error': 'Course code and at least one day required'}), 400
-
-    # Upsert
-    existing = LTrimmingOverride.query.filter_by(course_code=code, semester_id=active.id).first()
-    if existing:
-        existing.keep_days = ','.join(keep_days_raw)
-    else:
-        ov = LTrimmingOverride(course_code=code, semester_id=active.id, keep_days=','.join(keep_days_raw))
-        db.session.add(ov)
-
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@admin_bp.route('/api/config/ltrim/delete', methods=['POST'])
-@admin_required
-def api_config_ltrim_delete():
-    """Delete an L-trimming override."""
-    data = request.get_json()
-    ov = LTrimmingOverride.query.get(data.get('override_id'))
-    if ov:
-        db.session.delete(ov)
-        db.session.commit()
-    return jsonify({'success': True})
-
-
-# ─── FACULTY NAME MAP CRUD ──────────────────────────────────
-@admin_bp.route('/api/config/faculty-name', methods=['POST'])
-@admin_required
-def api_config_faculty_name():
-    """Add or update a faculty name mapping."""
-    data = request.get_json()
-    abbreviation = data.get('abbreviation', '').strip().upper()
-    full_name = data.get('full_name', '').strip()
-
-    if not abbreviation or not full_name:
-        return jsonify({'success': False, 'error': 'Abbreviation and full name required'}), 400
-
-    # Ensure the faculty exists
-    fac = Faculty.query.filter_by(abbreviation=abbreviation).first()
-    if not fac:
-        return jsonify({'success': False,
-                        'error': f'Faculty "{abbreviation}" not found. Upload timetable data first.'}), 400
-
-    # Upsert into FacultyNameMap
-    existing = FacultyNameMap.query.filter_by(abbreviation=abbreviation).first()
-    if existing:
-        existing.full_name = full_name
-        existing.source = 'Admin UI'
-    else:
-        fnm = FacultyNameMap(abbreviation=abbreviation, full_name=full_name, source='Admin UI')
-        db.session.add(fnm)
-
-    # Also update Faculty.full_name
-    fac.full_name = full_name
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-# ─── BATCH OVERLAP RULE CRUD ────────────────────────────────
-@admin_bp.route('/api/config/overlap', methods=['POST'])
-@admin_required
-def api_config_overlap():
-    """Add a batch overlap rule."""
-    data = request.get_json()
-    rule = BatchOverlapRule(
-        batch_a=data.get('batch_a', '').strip(),
-        section_a=data.get('section_a', 'All').strip(),
-        batch_b=data.get('batch_b', '').strip(),
-        section_b=data.get('section_b', 'All').strip(),
-        description=data.get('description', '').strip(),
-    )
-    if not rule.batch_a or not rule.batch_b:
-        return jsonify({'success': False, 'error': 'Both batch names required'}), 400
-
-    db.session.add(rule)
-    db.session.commit()
-    return jsonify({'success': True})
-
-
-@admin_bp.route('/api/config/overlap/delete', methods=['POST'])
-@admin_required
-def api_config_overlap_delete():
-    """Delete a batch overlap rule."""
-    data = request.get_json()
-    rule = BatchOverlapRule.query.get(data.get('rule_id'))
-    if rule:
-        db.session.delete(rule)
-        db.session.commit()
-    return jsonify({'success': True})
 
 
 # ─── ADMIN SLOT OVERRIDE ────────────────────────────────────

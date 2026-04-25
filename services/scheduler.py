@@ -621,18 +621,38 @@ def assign_rooms(semester_id):
                     break
 
             if not assigned:
-                course_code = course.code if course else 'Unknown'
-                violation = SchedulingViolation(
-                    semester_id=semester_id,
-                    violation_type='NO_ROOM_AVAILABLE',
-                    severity='warning',
-                    description=f'No available room for {course_code} '
-                                f'(needs {total_students} seats) at this time slot. '
-                                f'All fitting rooms are occupied.',
-                    course_id=course_id,
-                    time_slot_id=ts_id
-                )
-                db.session.add(violation)
+                # Fallback: assign the largest available room even if too small
+                for room in reversed(rooms):
+                    if room.id not in used_room_ids:
+                        for entry in group:
+                            entry.room_id = room.id
+                        used_room_ids.add(room.id)
+                        rooms_assigned += 1
+                        assigned = True
+                        course_code = course.code if course else 'Unknown'
+                        violation = SchedulingViolation(
+                            semester_id=semester_id,
+                            violation_type='ROOM_CAPACITY_OVERFLOW',
+                            severity='warning',
+                            description=f'{course_code} needs {total_students} seats '
+                                        f'but assigned to {room.name} ({room.capacity} seats).',
+                            course_id=course_id,
+                            time_slot_id=ts_id
+                        )
+                        db.session.add(violation)
+                        break
+                if not assigned:
+                    course_code = course.code if course else 'Unknown'
+                    violation = SchedulingViolation(
+                        semester_id=semester_id,
+                        violation_type='NO_ROOM_AVAILABLE',
+                        severity='error',
+                        description=f'No rooms available at all for {course_code} '
+                                    f'(needs {total_students} seats). All rooms occupied.',
+                        course_id=course_id,
+                        time_slot_id=ts_id
+                    )
+                    db.session.add(violation)
 
         # Process standalone entries
         for entry in standalone:
@@ -655,17 +675,37 @@ def assign_rooms(semester_id):
                     break
 
             if not assigned:
-                course_code = entry.course.code if entry.course else 'Unknown'
-                violation = SchedulingViolation(
-                    semester_id=semester_id,
-                    violation_type='NO_ROOM_AVAILABLE',
-                    severity='warning',
-                    description=f'No available room for {course_code} '
-                                f'(needs {total_students} seats).',
-                    course_id=entry.course_id,
-                    time_slot_id=ts_id
-                )
-                db.session.add(violation)
+                # Fallback: assign the largest available room even if too small
+                for room in reversed(rooms):
+                    if room.id not in used_room_ids:
+                        entry.room_id = room.id
+                        used_room_ids.add(room.id)
+                        rooms_assigned += 1
+                        assigned = True
+                        course_code = entry.course.code if entry.course else 'Unknown'
+                        violation = SchedulingViolation(
+                            semester_id=semester_id,
+                            violation_type='ROOM_CAPACITY_OVERFLOW',
+                            severity='warning',
+                            description=f'{course_code} needs {total_students} seats '
+                                        f'but assigned to {room.name} ({room.capacity} seats).',
+                            course_id=entry.course_id,
+                            time_slot_id=ts_id
+                        )
+                        db.session.add(violation)
+                        break
+                if not assigned:
+                    course_code = entry.course.code if entry.course else 'Unknown'
+                    violation = SchedulingViolation(
+                        semester_id=semester_id,
+                        violation_type='NO_ROOM_AVAILABLE',
+                        severity='error',
+                        description=f'No rooms at all for {course_code} '
+                                    f'(needs {total_students} seats). All rooms occupied.',
+                        course_id=entry.course_id,
+                        time_slot_id=ts_id
+                    )
+                    db.session.add(violation)
 
     db.session.commit()
     return rooms_assigned

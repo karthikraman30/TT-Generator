@@ -92,17 +92,12 @@ def _ics_escape(text):
 
 # ─── MAIN GENERATOR ────────────────────────────────────────
 
-def generate_faculty_ics(faculty_id,
-                         semester_start='2026-01-06',
-                         semester_weeks=16,
-                         timezone='Asia/Kolkata'):
+def generate_faculty_ics(faculty_id, timezone='Asia/Kolkata'):
     """
     Generate an ICS calendar file for one faculty member.
 
     Args:
         faculty_id: The faculty's DB ID.
-        semester_start: First Monday of the semester (YYYY-MM-DD).
-        semester_weeks: Number of weeks to generate events for.
         timezone: IANA timezone name (default: Asia/Kolkata).
 
     Returns:
@@ -118,6 +113,10 @@ def generate_faculty_ics(faculty_id,
     active_sem = Semester.query.filter_by(is_active=True).first()
     if not active_sem:
         raise ValueError("No active semester.")
+
+    # Use semester dates dynamically
+    start_date = datetime.combine(active_sem.start_date, datetime.min.time())
+    semester_weeks = active_sem.semester_weeks
 
     # Get all timetable entries for this faculty
     entries = TimetableEntry.query.filter_by(
@@ -145,11 +144,9 @@ def generate_faculty_ics(faculty_id,
         schedule[(ts.day, hour_key)].append({
             'course_code': entry.course.code if entry.course else '?',
             'course_name': entry.course.name if entry.course else '',
-            'room': entry.room.name if entry.room else '',
+            'room': entry.room.name if entry.room else 'TBA',
             'batches': batch_names,
         })
-
-    start_date = datetime.strptime(semester_start, '%Y-%m-%d')
 
     # Build ICS
     lines = [

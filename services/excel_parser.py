@@ -287,26 +287,37 @@ def parse_rooms_file(filepath):
 
 
 def parse_faculty_mapping(filepath):
-    """Parse a faculty mapping CSV with columns: Abbreviation, Full Name, Email."""
+    """Parse a faculty mapping file with columns: Full Name, Abbreviation, Email (optional).
+    
+    This file is used to map full names to abbreviations already imported
+    from the Slots file. It will only UPDATE existing faculty records,
+    not create new ones.
+    """
     df = pd.read_csv(filepath) if filepath.endswith('.csv') else pd.read_excel(filepath)
-    count = 0
+    updated = 0
+    skipped = 0
     for _, row in df.iterrows():
-        abbr = str(row.iloc[0]).strip().upper()
-        full_name = str(row.iloc[1]).strip()
+        full_name = str(row.iloc[0]).strip()
+        abbr = str(row.iloc[1]).strip().upper()
         email = str(row.iloc[2]).strip() if len(row) > 2 and pd.notna(row.iloc[2]) else None
+
+        if not abbr or abbr == 'NAN':
+            continue
 
         fac = Faculty.query.filter_by(abbreviation=abbr).first()
         if fac:
             fac.full_name = full_name
             if email:
                 fac.email = email
-            count += 1
+            updated += 1
         else:
-            db.session.add(Faculty(full_name=full_name, abbreviation=abbr, email=email))
-            count += 1
+            skipped += 1
 
     db.session.commit()
-    return f"{count} faculty records updated/created"
+    msg = f"{updated} faculty names mapped"
+    if skipped:
+        msg += f" ({skipped} abbreviations not found in slots — skipped)"
+    return msg
 
 
 def parse_section_strengths(filepath):
@@ -373,3 +384,50 @@ def parse_section_strengths(filepath):
 
     db.session.commit()
     return f"Applied section strengths to {updated} out of {len(courses)} courses"
+
+
+def parse_course_strengths(filepath):
+    """Parse a direct Course Code → Required Seats mapping file.
+    
+    Columns: Course Code, Required Seats
+    
+    This is the simplest and most reliable way to set room capacities.
+    Each row directly maps a course code to its required seat count.
+    If multiple courses share the same code (e.g. different sections),
+    all matching courses are updated.
+    """
+    df = pd.read_csv(filepath) if filepath.endswith('.csv') else pd.read_excel(filepath)
+    updated = 0
+    not_found = 0
+
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        return "No active semester — cannot match courses"
+
+    for _, row in df.iterrows():
+        code = str(row.iloc[0]).strip()
+        seats_raw = row.iloc[1]
+
+        if not code or code == 'nan':
+            continue
+
+        try:
+            seats = int(float(seats_raw))
+        except (ValueError, TypeError):
+            continue
+
+        # Find all courses with this code in the active semester
+        courses = Course.query.filter_by(code=code, semester_id=active.id).all()
+        if courses:
+            for c in courses:
+                c.capacity_override = seats
+            updated += len(courses)
+        else:
+            not_found += 1
+
+    db.session.commit()
+    msg = f"{updated} course capacities set"
+    if not_found:
+        msg += f" ({not_found} codes not found in active semester)"
+    return msg
+

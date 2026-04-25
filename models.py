@@ -31,12 +31,11 @@ class Program(db.Model):
 # ─── SEMESTERS ───────────────────────────────────────────────
 class Semester(db.Model):
     __tablename__ = 'semesters'
-    __table_args__ = (db.UniqueConstraint('academic_year', 'season'),)
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    academic_year = db.Column(db.String(20), nullable=False)
-    season = db.Column(db.String(20), nullable=False)  # Winter, Summer, Autumn
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
     is_active = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -44,10 +43,19 @@ class Semester(db.Model):
     courses = db.relationship('Course', backref='semester', lazy='dynamic')
     slots = db.relationship('Slot', backref='semester', lazy='dynamic')
 
+    @property
+    def semester_weeks(self):
+        """Calculate weeks between start and end dates."""
+        if self.start_date and self.end_date:
+            delta = (self.end_date - self.start_date).days
+            return max(1, delta // 7)
+        return 16  # default
+
     def to_dict(self):
         return {
             'id': self.id, 'name': self.name,
-            'academic_year': self.academic_year, 'season': self.season,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
             'is_active': self.is_active
         }
 
