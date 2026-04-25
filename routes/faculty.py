@@ -103,3 +103,34 @@ def download_ics():
     response.headers['Content-Disposition'] = \
         f'attachment; filename=Timetable_{faculty.abbreviation}.ics'
     return response
+
+
+@faculty_bp.route('/download/pdf')
+@login_required
+def download_pdf():
+    """Download the specific faculty's timetable as a PDF."""
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        flash('No active semester.', 'error')
+        return redirect(url_for('faculty.dashboard'))
+
+    faculty_id = session.get('user', {}).get('id')
+    faculty = Faculty.query.get(faculty_id) if faculty_id else None
+    if not faculty:
+        flash('Faculty profile not found.', 'error')
+        return redirect(url_for('faculty.dashboard'))
+
+    from services.pdf_generator import generate_faculty_pdf
+    pdf_buffer = generate_faculty_pdf(active.id, faculty.id)
+    
+    if not pdf_buffer:
+        flash('Failed to generate PDF.', 'error')
+        return redirect(url_for('faculty.dashboard'))
+        
+    from flask import send_file
+    return send_file(
+        pdf_buffer,
+        as_attachment=True,
+        download_name=f"My_Timetable_{faculty.abbreviation}_{active.name.replace(' ', '_')}.pdf",
+        mimetype='application/pdf'
+    )

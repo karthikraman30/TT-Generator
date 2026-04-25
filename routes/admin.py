@@ -4,7 +4,7 @@ Full CRUD for all entities, file uploads, schedule generation, and violation log
 """
 
 import os
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, make_response, send_file
 from models import db, Program, Semester, Batch, Faculty, Room, Course, Slot, SlotCourse, \
     CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, TimeSlot
 from routes.auth import admin_required
@@ -33,6 +33,56 @@ def dashboard():
     return render_template('admin/dashboard.html', stats=stats, active_semester=active_semester)
 
 
+@admin_bp.route('/timetable/export/pdf')
+@admin_required
+def export_timetable_pdf():
+    """Export the master timetable as a PDF."""
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        flash('No active semester.', 'error')
+        return redirect(url_for('admin.timetable'))
+
+    from services.pdf_generator import generate_master_pdf
+    pdf_buffer = generate_master_pdf(active.id)
+    
+    if not pdf_buffer:
+        flash('Failed to generate PDF. Make sure timetable entries exist.', 'error')
+        return redirect(url_for('admin.timetable'))
+        
+    return send_file(
+        pdf_buffer,
+        as_attachment=True,
+        download_name=f"Master_Timetable_{active.name.replace(' ', '_')}.pdf",
+        mimetype='application/pdf'
+    )
+
+
+@admin_bp.route('/faculty/<int:fac_id>/export/pdf')
+@admin_required
+def export_faculty_pdf(fac_id):
+    """Export a specific faculty's timetable as a PDF."""
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        flash('No active semester.', 'error')
+        return redirect(url_for('admin.faculty'))
+
+    from services.pdf_generator import generate_faculty_pdf
+    pdf_buffer = generate_faculty_pdf(active.id, fac_id)
+    
+    if not pdf_buffer:
+        flash('Failed to generate PDF.', 'error')
+        return redirect(url_for('admin.faculty'))
+        
+    fac = Faculty.query.get(fac_id)
+    return send_file(
+        pdf_buffer,
+        as_attachment=True,
+        download_name=f"Faculty_Timetable_{fac.abbreviation}_{active.name.replace(' ', '_')}.pdf",
+        mimetype='application/pdf'
+    )
+
+
+# ─── UPLOAD EXCEL/CSV ───────────────────────────────────────────────
 # ─── SEMESTERS ───────────────────────────────────────────────
 @admin_bp.route('/semesters')
 @admin_required
@@ -212,10 +262,12 @@ def courses():
     active = Semester.query.filter_by(is_active=True).first()
     if active:
         all_courses = Course.query.filter_by(semester_id=active.id).order_by(Course.code).all()
+        all_batches = Batch.query.filter_by(semester_id=active.id).order_by(Batch.name).all()
     else:
         all_courses = Course.query.order_by(Course.code).all()
+        all_batches = Batch.query.order_by(Batch.name).all()
     semesters = Semester.query.all()
-    return render_template('admin/courses.html', courses=all_courses, active_semester=active, semesters=semesters)
+    return render_template('admin/courses.html', courses=all_courses, active_semester=active, semesters=semesters, batches=all_batches)
 
 
 @admin_bp.route('/courses/<int:course_id>/update-capacity', methods=['POST'])
@@ -300,9 +352,15 @@ def add_course():
     slot_id = request.form.get('slot_id', '').strip()
     faculty_abbr = request.form.get('faculty_abbr', '').strip().upper()
     capacity = request.form.get('capacity_override', '').strip()
+    batch_ids = request.form.getlist('batches')
 
     if not code or not name:
         flash('Course code and name are required.', 'error')
+        return redirect(url_for('admin.courses'))
+
+    lectures_int = int(lectures) if lectures.isdigit() else 0
+    if lectures_int > 3:
+        flash('Lectures per week (L) cannot exceed 3.', 'error')
         return redirect(url_for('admin.courses'))
 
     # Check for duplicates
@@ -315,7 +373,7 @@ def add_course():
         code=code,
         name=name,
         semester_id=active.id,
-        lectures_per_week=int(lectures) if lectures.isdigit() else 0,
+        lectures_per_week=lectures_int,
         tutorials_per_week=int(tutorials) if tutorials.isdigit() else 0,
         practicals_per_week=int(practicals) if practicals.isdigit() else 0,
         credits=int(credits) if credits.isdigit() else 0,
@@ -338,6 +396,12 @@ def add_course():
         if fac:
             cf = CourseFaculty(course_id=course.id, faculty_id=fac.id)
             db.session.add(cf)
+
+    # Link batches
+    if batch_ids:
+        for bid in batch_ids:
+            if bid.isdigit():
+                db.session.add(CourseBatch(course_id=course.id, batch_id=int(bid)))
 
     db.session.commit()
     flash(f'Course {code} "{name}" added successfully.', 'success')

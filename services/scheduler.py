@@ -261,7 +261,7 @@ def validate_buckets(semester_id):
         if not slot_courses_entries:
             continue
 
-        # Group by faculty
+        # Group by faculty object instead of abbreviation
         fac_courses = defaultdict(list)
         for sc in slot_courses_entries:
             course = sc.course
@@ -272,13 +272,14 @@ def validate_buckets(semester_id):
             if cf and cf.faculty_id:
                 fac = Faculty.query.get(cf.faculty_id)
                 if fac and not _is_vf(fac.abbreviation):
-                    fac_courses[fac.abbreviation].append({
+                    fac_courses[fac].append({
                         'course': course,
                         'batch': sc.batch,
                         'slot_course': sc,
                     })
 
-        for fac_abbr, clist in fac_courses.items():
+        for fac, clist in fac_courses.items():
+            fac_abbr = fac.abbreviation
             # Group by course code
             by_code = defaultdict(list)
             for entry in clist:
@@ -286,11 +287,14 @@ def validate_buckets(semester_id):
 
             if len(by_code) > 1:
                 codes = ', '.join(sorted(by_code.keys()))
-                errors.append(
-                    f"CRITICAL: Faculty '{fac_abbr}' is assigned to DIFFERENT courses "
-                    f"({codes}) in {slot.slot_label}. This is a data error — "
-                    f"a professor cannot be in two rooms simultaneously."
-                )
+                first_course = list(by_code.values())[0][0]['course']
+                errors.append({
+                    'description': f"CRITICAL: Faculty '{fac_abbr}' is assigned to DIFFERENT courses "
+                                   f"({codes}) in {slot.slot_label}. This is a data error — "
+                                   f"a professor cannot be in two rooms simultaneously.",
+                    'faculty_id': fac.id,
+                    'course_id': first_course.id
+                })
 
             for code, same_code_entries in by_code.items():
                 if len(same_code_entries) > 1:
@@ -305,11 +309,13 @@ def validate_buckets(semester_id):
                             'slot': slot.slot_label,
                             'batches': batch_names,
                         })
-                        warnings.append(
-                            f"Auto-merge: {fac_abbr} teaches {code} to multiple batches "
-                            f"({', '.join(batch_names)}) in {slot.slot_label}. "
-                            f"Combined room capacity will be used."
-                        )
+                        warnings.append({
+                            'description': f"Auto-merge: {fac_abbr} teaches {code} to multiple batches "
+                                           f"({', '.join(batch_names)}) in {slot.slot_label}. "
+                                           f"Combined room capacity will be used.",
+                            'faculty_id': fac.id,
+                            'course_id': same_code_entries[0]['course'].id
+                        })
 
     # Log critical errors as violations
     for err in errors:
@@ -317,7 +323,9 @@ def validate_buckets(semester_id):
             semester_id=semester_id,
             violation_type='FACULTY_DOUBLE_BOOKING',
             severity='error',
-            description=err
+            description=err['description'],
+            faculty_id=err['faculty_id'],
+            course_id=err['course_id']
         )
         db.session.add(violation)
 
@@ -327,12 +335,14 @@ def validate_buckets(semester_id):
             semester_id=semester_id,
             violation_type='COMBINED_CLASS_DETECTED',
             severity='warning',
-            description=warn
+            description=warn['description'],
+            faculty_id=warn['faculty_id'],
+            course_id=warn['course_id']
         )
         db.session.add(violation)
 
     db.session.flush()
-    return errors, warnings, merges
+    return [e['description'] for e in errors], [w['description'] for w in warnings], merges
 
 
 # ─── PASS 1c: GENERATE TIMETABLE ENTRIES FROM MAPPINGS ──────
@@ -637,6 +647,7 @@ def assign_rooms(semester_id):
                             description=f'{course_code} needs {total_students} seats '
                                         f'but assigned to {room.name} ({room.capacity} seats).',
                             course_id=course_id,
+                            faculty_id=group[0].faculty_id if group else None,
                             time_slot_id=ts_id
                         )
                         db.session.add(violation)
@@ -650,6 +661,7 @@ def assign_rooms(semester_id):
                         description=f'No rooms available at all for {course_code} '
                                     f'(needs {total_students} seats). All rooms occupied.',
                         course_id=course_id,
+                        faculty_id=group[0].faculty_id if group else None,
                         time_slot_id=ts_id
                     )
                     db.session.add(violation)
@@ -690,6 +702,7 @@ def assign_rooms(semester_id):
                             description=f'{course_code} needs {total_students} seats '
                                         f'but assigned to {room.name} ({room.capacity} seats).',
                             course_id=entry.course_id,
+                            faculty_id=entry.faculty_id,
                             time_slot_id=ts_id
                         )
                         db.session.add(violation)
@@ -703,6 +716,7 @@ def assign_rooms(semester_id):
                         description=f'No rooms at all for {course_code} '
                                     f'(needs {total_students} seats). All rooms occupied.',
                         course_id=entry.course_id,
+                        faculty_id=entry.faculty_id,
                         time_slot_id=ts_id
                     )
                     db.session.add(violation)

@@ -44,6 +44,7 @@
                 <td>{{ f.email or '—' }}</td>
                 <td><span class="badge {% if f.role == 'admin' %}badge-warning{% else %}badge-info{% endif %}">{{ f.role }}</span></td>
                 <td>
+                    <a href="{{ url_for('admin.export_faculty_pdf', fac_id=f.id) }}" class="btn btn-sm btn-info" target="_blank" style="margin-right:0.25rem;">📄 PDF</a>
                     <form action="{{ url_for('admin.delete_faculty', fac_id=f.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete {{ f.full_name }}?');">
                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                     </form>
