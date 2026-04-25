@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Slot Grid — Timetable Generator{% endblock %}
+{% block page_title %}Slot Grid{% endblock %}
+
+{% block content %}
+{% if not active_semester %}
+<div class="empty-state">
+    <div class="empty-icon">📅</div>
+    <div class="empty-text">No active semester</div>
+    <div class="empty-hint">Activate a semester first.</div>
+</div>
+{% else %}
+
+<!-- Generate / Regenerate -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">{{ active_semester.name }} — Slot Assignments</span>
+        <div style="display:flex;gap:0.5rem;">
+            <form action="{{ url_for('admin.generate_timetable') }}" method="POST" style="display:inline;">
+                <button type="submit" class="btn btn-primary btn-sm">🧩 Auto-Assign Slots</button>
+            </form>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if not grid %}
+        <div class="empty-state">
+            <div class="empty-icon">🧩</div>
+            <div class="empty-text">No slot assignments yet</div>
+            <div class="empty-hint">Click "Auto-Assign Slots" to distribute Slot-1 through Slot-8 across the weekly grid.</div>
+        </div>
+        {% else %}
+        <!-- Slot Color Legend -->
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+            {% set slot_colors = {
+                'Slot-1': '#6366f1', 'Slot-2': '#8b5cf6', 'Slot-3': '#a78bfa',
+                'Slot-4': '#10b981', 'Slot-5': '#14b8a6', 'Slot-6': '#f59e0b',
+                'Slot-7': '#ef4444', 'Slot-8': '#3b82f6'
+            } %}
+            {% for label, color in slot_colors.items() %}
+            <span style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.78rem;font-weight:600;">
+                <span style="width:14px;height:14px;border-radius:4px;background:{{ color }};display:inline-block;"></span>
+                {{ label }}
+            </span>
+            {% endfor %}
+        </div>
+
+        <!-- The Grid -->
+        <div class="timetable-grid">
+            <div class="tt-header"></div>
+            <div class="tt-header">Monday</div>
+            <div class="tt-header">Tuesday</div>
+            <div class="tt-header">Wednesday</div>
+            <div class="tt-header">Thursday</div>
+            <div class="tt-header">Friday</div>
+
+            {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday'] %}
+            {% set periods = [
+                {'num': 1, 'label': '08–09'},
+                {'num': 2, 'label': '09–10'},
+                {'num': 3, 'label': '10–11'},
+                {'num': 4, 'label': '11–12'},
+                {'num': 5, 'label': '12–13'}
+            ] %}
+
+            {% for p in periods %}
+            <div class="tt-time">{{ p.label }}</div>
+            {% for day in days %}
+            {% set key = (day, p.num) %}
+            {% set slot_label = grid.get(key, '') %}
+            {% set mid = mapping_ids.get(key, '') %}
+            {% set bg_color = slot_colors.get(slot_label, 'transparent') %}
+            <div class="tt-cell slot-cell {% if day == 'Wednesday' and p.num == 1 %}blocked-cell{% endif %}"
+                 {% if slot_label %}
+                 style="background: {{ bg_color }}22; border-left: 3px solid {{ bg_color }};"
+                 data-mapping-id="{{ mid }}"
+                 data-slot="{{ slot_label }}"
+                 {% endif %}
+                 {% if day == 'Wednesday' and p.num == 1 and not slot_label %}
+                 style="background: rgba(239,68,68,0.06); border-left: 3px solid rgba(239,68,68,0.3);"
+                 {% endif %}>
+                {% if day == 'Wednesday' and p.num == 1 and not slot_label %}
+                <div style="font-size:0.72rem;color:var(--text-muted);text-align:center;padding-top:0.5rem;">🚫 FREE</div>
+                {% elif slot_label %}
+                <div style="font-weight:700;font-size:0.85rem;color:{{ bg_color }};text-align:center;padding-top:0.3rem;">{{ slot_label }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if grid %}
+<!-- Swap Tool -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Swap Slot Positions</span>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('admin.swap_slots') }}" method="POST" class="form-inline">
+            <div class="form-group">
+                <label class="form-label">Time Block 1</label>
+                <select name="mapping_id_1" required>
+                    <option value="">Select...</option>
+                    {% for day in days %}
+                    {% for p in periods %}
+                    {% set key = (day, p.num) %}
+                    {% if grid.get(key) %}
+                    <option value="{{ mapping_ids.get(key) }}">{{ day }} {{ p.label }} → {{ grid.get(key) }}</option>
+                    {% endif %}
+                    {% endfor %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Time Block 2</label>
+                <select name="mapping_id_2" required>
+                    <option value="">Select...</option>
+                    {% for day in days %}
+                    {% for p in periods %}
+                    {% set key = (day, p.num) %}
+                    {% if grid.get(key) %}
+                    <option value="{{ mapping_ids.get(key) }}">{{ day }} {{ p.label }} → {{ grid.get(key) }}</option>
+                    {% endif %}
+                    {% endfor %}
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">🔄 Swap</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

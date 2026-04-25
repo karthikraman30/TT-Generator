@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Faculty — Timetable Generator{% endblock %}
+{% block page_title %}Faculty{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header"><span class="card-title">Add Faculty</span></div>
+    <div class="card-body">
+        <form action="{{ url_for('admin.add_faculty') }}" method="POST" class="form-inline">
+            <div class="form-group">
+                <label class="form-label" for="full_name">Full Name</label>
+                <input type="text" id="full_name" name="full_name" placeholder="Pokhar M Jat" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="abbreviation">Abbreviation</label>
+                <input type="text" id="abbreviation" name="abbreviation" placeholder="PMJ" required style="text-transform:uppercase;">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="email">Email (optional)</label>
+                <input type="email" id="email" name="email" placeholder="pmj@uni.ac.in">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="role">Role</label>
+                <select id="role" name="role">
+                    <option value="faculty">Faculty</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">+ Add</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><span class="card-title">All Faculty ({{ faculty|length }})</span></div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Name</th><th>Abbr.</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for f in faculty %}
+            <tr>
+                <td style="color:var(--text-primary);font-weight:600;">{{ f.full_name }}</td>
+                <td><code>{{ f.abbreviation }}</code></td>
+                <td>{{ f.email or '—' }}</td>
+                <td><span class="badge {% if f.role == 'admin' %}badge-warning{% else %}badge-info{% endif %}">{{ f.role }}</span></td>
+                <td>
+                    <form action="{{ url_for('admin.delete_faculty', fac_id=f.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete {{ f.full_name }}?');">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">No faculty added yet</div></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

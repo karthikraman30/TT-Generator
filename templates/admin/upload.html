@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Upload Data — Timetable Generator{% endblock %}
+{% block page_title %}Upload Data{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Import Data from Excel / CSV</span>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('admin.upload') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+            <div class="form-group">
+                <label class="form-label" for="upload_type">Data Type</label>
+                <select id="upload_type" name="upload_type">
+                    <option value="slots">Slots File (Courses, Batches, Faculty, Slots)</option>
+                    <option value="rooms">Rooms File (Room names & capacities)</option>
+                    <option value="section_strengths">Section Strengths (Section/Batch → Student Count)</option>
+                    <option value="faculty_mapping">Faculty Mapping (Abbreviation → Full Name)</option>
+                </select>
+            </div>
+
+            <div class="upload-zone" id="uploadZone">
+                <input type="file" name="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none;" required>
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">Click or drag a file here</div>
+                <div class="upload-hint">Accepted formats: .xlsx, .xls, .csv (max 16 MB)</div>
+            </div>
+
+            <div style="margin-top:1.25rem;">
+                <button type="submit" class="btn btn-primary">⬆️ Upload & Process</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Help card -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">File Format Guide</span>
+    </div>
+    <div class="card-body" style="color:var(--text-secondary);font-size:0.88rem;line-height:1.8;">
+        <p><strong>1. Slots File:</strong> The standard university slots Excel file. Columns grouped by slots (Slot-1 through Slot-8, Slot-Free). Each row maps a batch to its courses, L-T-P-C, course type, and faculty abbreviation.</p>
+        <p style="margin-top:0.75rem;"><strong>2. Rooms File:</strong> Excel/CSV with columns: <code>Room Name</code>, <code>Capacity</code>, <code>Building</code> (optional), <code>Type</code> (optional).</p>
+        <p style="margin-top:0.75rem;"><strong>3. Section Strengths:</strong> Excel/CSV with 2 columns: <code>Section / Batch Label</code> and <code>Student Count</code>. Example:</p>
+        <div style="margin:0.75rem 0;padding:0.75rem 1rem;background:var(--bg-secondary);border-radius:var(--radius-sm);font-family:monospace;font-size:0.82rem;">
+            <div style="display:grid;grid-template-columns:200px 100px;gap:0.25rem;">
+                <span style="color:var(--text-muted);font-weight:600;">Label</span>
+                <span style="color:var(--text-muted);font-weight:600;">Count</span>
+                <span>Sec A</span><span>180</span>
+                <span>Sec B</span><span>180</span>
+                <span>CS-Only</span><span>80</span>
+                <span>EVD</span><span>40</span>
+                <span>MnC</span><span>60</span>
+                <span>MTech ICT-ML</span><span>30</span>
+            </div>
+        </div>
+        <p style="color:var(--text-muted);font-size:0.8rem;">A reference file <code>section_strengths.xlsx</code> has been generated in your project folder. Fill in the counts and upload it.</p>
+        <p style="margin-top:0.75rem;"><strong>4. Faculty Mapping:</strong> CSV with columns: <code>Abbreviation</code>, <code>Full Name</code>, <code>Email</code> (optional).</p>
+    </div>
+</div>
+{% endblock %}

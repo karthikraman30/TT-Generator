@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{% if view_type == 'master' %}Master Timetable{% else %}My Timetable{% endif %} — Timetable Generator{% endblock %}
+{% block page_title %}{% if view_type == 'master' %}Master Timetable{% else %}My Timetable{% endif %}{% endblock %}
+
+{% block content %}
+{% if not active_semester %}
+<div class="empty-state">
+    <div class="empty-icon">📅</div>
+    <div class="empty-text">No active semester</div>
+</div>
+{% elif not entries %}
+<div class="empty-state">
+    <div class="empty-icon">🗓️</div>
+    <div class="empty-text">No timetable available yet</div>
+    <div class="empty-hint">The admin has not generated a schedule for this semester yet.</div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">{{ active_semester.name }}{% if view_type != 'master' %} — {{ session.user.name }}{% endif %}</span>
+    </div>
+    <div class="card-body" style="overflow-x:auto;">
+        <div class="timetable-grid">
+            <div class="tt-header"></div>
+            <div class="tt-header">Monday</div>
+            <div class="tt-header">Tuesday</div>
+            <div class="tt-header">Wednesday</div>
+            <div class="tt-header">Thursday</div>
+            <div class="tt-header">Friday</div>
+
+            {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday'] %}
+            {% set periods = [
+                {'num': 1, 'label': '08:00–09:00'},
+                {'num': 2, 'label': '09:00–10:00'},
+                {'num': 3, 'label': '10:00–11:00'},
+                {'num': 4, 'label': '11:00–12:00'},
+                {'num': 5, 'label': '12:00–13:00'}
+            ] %}
+
+            {% for p in periods %}
+            <div class="tt-time">{{ p.label }}</div>
+            {% for day in days %}
+            <div class="tt-cell">
+                {% for entry in entries %}
+                {% if entry.time_slot and entry.time_slot.day == day and entry.time_slot.period == p.num %}
+                <div class="tt-entry">
+                    <div class="tt-entry-code">{{ entry.course.code if entry.course else '?' }}</div>
+                    <div class="tt-entry-faculty">{{ entry.faculty.abbreviation if entry.faculty else '' }}</div>
+                    <div class="tt-entry-room">{{ entry.room.name if entry.room else '' }}</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

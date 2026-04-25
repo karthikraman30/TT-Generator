@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Batches — Timetable Generator{% endblock %}
+{% block page_title %}Batches{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Student Batches {% if active_semester %}— {{ active_semester.name }}{% endif %}</span>
+        <span class="badge badge-info">{{ batches|length }} batches</span>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Batch Name</th>
+                    <th>Program</th>
+                    <th>Sem</th>
+                    <th>Students</th>
+                    <th>Courses</th>
+                    <th>Set Count</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for b in batches %}
+            {% set course_count = b.slot_courses|length %}
+            <tr>
+                <td style="color:var(--text-primary);font-weight:600;">
+                    {{ b.name }}
+                    {% if 'CS-Only' in b.name %}
+                        <span class="badge" style="background:rgba(72,187,120,0.2);color:#48bb78;font-size:0.65rem;margin-left:0.3rem;">CS-Only</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if b.program %}
+                        <span class="badge" style="background:rgba(99,179,237,0.15);color:#63b3ed;">{{ b.program.name }}</span>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ b.sem_number }}</td>
+                <td>
+                    {% if b.student_count > 0 %}
+                        <span class="badge badge-success">{{ b.student_count }}</span>
+                    {% else %}
+                        <span class="badge badge-warning">Not set</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% set courses = batch_courses.get(b.id, []) %}
+                    <details style="cursor:pointer;">
+                        <summary style="color:var(--accent-hover);">{{ courses|length }} courses</summary>
+                        <div style="margin-top:0.5rem;font-size:0.78rem;color:var(--text-secondary);max-height:200px;overflow-y:auto;">
+                            {% for c in courses %}
+                                <div style="padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                                    <span style="color:var(--accent-hover);font-weight:600;">{{ c.code }}</span>
+                                    {{ c.name }}
+                                    {% if c.capacity_override %}
+                                        <span class="badge badge-success" style="font-size:0.6rem;">{{ c.capacity_override }} seats</span>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                </td>
+                <td>
+                    <form action="{{ url_for('admin.update_batch_count', batch_id=b.id) }}" method="POST" style="display:flex;gap:0.4rem;align-items:center;">
+                        <input type="number" name="student_count" min="0" value="{{ b.student_count }}"
+                               style="width:75px;padding:0.25rem 0.4rem;font-size:0.8rem;">
+                        <button type="submit" class="btn btn-sm btn-primary" style="padding:0.2rem 0.5rem;font-size:0.75rem;">Set</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty-state">
+                <div class="empty-icon">👥</div>
+                <div class="empty-text">No batches loaded yet</div>
+                <div class="empty-hint">Upload a Slots file to auto-create batches.</div>
+            </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><span class="card-title">ℹ️ How Batches & Sections Work</span></div>
+    <div class="card-body" style="color:var(--text-secondary);line-height:1.8;">
+        <p><strong>Batches</strong> come from the Slots Excel file (e.g. <code>BTech Sem-II (ICT + CS)</code>).</p>
+        <p><strong>Sections</strong> (Sec A / Sec B) are embedded in individual <strong>course names</strong>, not batches.
+           For room assignment, set section strengths on the <a href="{{ url_for('admin.courses') }}" style="color:var(--accent-hover);">Courses page</a> using the Bulk tool.</p>
+        <p><strong>Student counts</strong> on this page are used as a fallback only if no <em>Required Seats</em> override is set on the course.</p>
+    </div>
+</div>
+{% endblock %}

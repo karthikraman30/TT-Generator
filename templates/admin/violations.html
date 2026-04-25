@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Violations Log — Timetable Generator{% endblock %}
+{% block page_title %}Scheduling Violations{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Violation Log {% if active_semester %}— {{ active_semester.name }}{% endif %}</span>
+        <span class="badge badge-error">{{ violations|length }} entries</span>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Time</th><th>Type</th><th>Severity</th><th>Description</th><th>Course</th><th>Faculty</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for v in violations %}
+            <tr>
+                <td style="font-size:0.78rem;">{{ v.created_at.strftime('%Y-%m-%d %H:%M') if v.created_at else '—' }}</td>
+                <td><code style="color:var(--warning);">{{ v.violation_type }}</code></td>
+                <td><span class="badge badge-{{ v.severity }}">{{ v.severity }}</span></td>
+                <td style="max-width:300px;color:var(--text-primary);">{{ v.description }}</td>
+                <td>{{ v.course.code if v.course else '—' }}</td>
+                <td>{{ v.faculty.abbreviation if v.faculty else '—' }}</td>
+                <td>
+                    {% if v.resolved %}<span class="badge badge-success">Resolved</span>
+                    {% else %}<span class="badge badge-error">Open</span>{% endif %}
+                </td>
+                <td>
+                    {% if not v.resolved %}
+                    <form action="{{ url_for('admin.resolve_violation', vid=v.id) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-success">Resolve</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty-state">
+                <div class="empty-icon">✅</div>
+                <div class="empty-text">No violations recorded</div>
+                <div class="empty-hint">Violations will appear here after schedule generation</div>
+            </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

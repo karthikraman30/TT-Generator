@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Courses — Timetable Generator{% endblock %}
+{% block page_title %}Courses{% endblock %}
+
+{% block content %}
+<!-- Info banner -->
+<div class="card" style="border-left:3px solid var(--info);">
+    <div class="card-body" style="display:flex;align-items:center;gap:1rem;padding:0.85rem 1.25rem;">
+        <span style="font-size:1.3rem;">💡</span>
+        <span style="color:var(--text-secondary);font-size:0.88rem;">
+            Set section strengths via <a href="{{ url_for('admin.upload') }}" style="color:var(--accent-hover);font-weight:600;">Upload Data → Section Strengths</a> Excel file. You can also override individual courses below.
+        </span>
+    </div>
+</div>
+
+<!-- Courses Table -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Courses {% if active_semester %}— {{ active_semester.name }}{% endif %}</span>
+        <span class="badge badge-info">{{ courses|length }} courses</span>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Section</th>
+                    <th>Batches</th>
+                    <th>L-T-P-C</th>
+                    <th>Type</th>
+                    <th>Req. Seats</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in courses %}
+            <tr>
+                <td style="color:var(--accent-hover);font-weight:700;">{{ c.code }}</td>
+                <td style="color:var(--text-primary);">{{ c.name }}</td>
+                <td>
+                    {% if '(Sec A)' in c.name %}
+                        <span class="badge" style="background:rgba(99,179,237,0.2);color:#63b3ed;">Sec A</span>
+                    {% elif '(Sec B)' in c.name %}
+                        <span class="badge" style="background:rgba(237,137,54,0.2);color:#ed8936;">Sec B</span>
+                    {% elif 'CS-Only' in (c.batches.all()|map(attribute='name')|join(',')) or 'CS-Only' in c.course_type or 'CS' == c.code[:2] %}
+                        <span class="badge" style="background:rgba(72,187,120,0.2);color:#48bb78;">CS-Only</span>
+                    {% else %}
+                        <span class="badge" style="background:rgba(160,174,192,0.15);color:#a0aec0;">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% for b in c.batches.all() %}
+                        <span class="badge badge-batch" style="font-size:0.7rem;margin:1px;">{{ b.name|replace('BTech ','')|replace('MTech ','')|replace('MSc ','') }}</span>
+                    {% endfor %}
+                </td>
+                <td>{{ c.lectures_per_week }}-{{ c.tutorials_per_week }}-{{ c.practicals_per_week }}-{{ c.credits }}</td>
+                <td>
+                    <span class="badge {% if c.course_type == 'Core' %}badge-core{% elif 'Elective' in c.course_type %}badge-elective{% else %}badge-open{% endif %}">
+                        {{ c.course_type }}
+                    </span>
+                </td>
+                <td>
+                    <form action="{{ url_for('admin.update_course_capacity', course_id=c.id) }}" method="POST" style="display:flex;gap:0.4rem;align-items:center;">
+                        <input type="number" name="capacity_override" min="1"
+                               value="{{ c.capacity_override if c.capacity_override else '' }}"
+                               placeholder="Auto"
+                               style="width:70px;padding:0.25rem 0.4rem;font-size:0.8rem;">
+                        <button type="submit" class="btn btn-sm btn-primary" style="padding:0.2rem 0.5rem;font-size:0.75rem;">Set</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty-state">
+                <div class="empty-icon">📚</div>
+                <div class="empty-text">No courses loaded yet</div>
+                <div class="empty-hint">Upload a Slots file to import courses automatically</div>
+            </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Programs — Timetable Generator{% endblock %}
+{% block page_title %}Programs{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header"><span class="card-title">Add Program</span></div>
+    <div class="card-body">
+        <form action="{{ url_for('admin.add_program') }}" method="POST" class="form-inline">
+            <div class="form-group">
+                <label class="form-label" for="name">Program Name</label>
+                <input type="text" id="name" name="name" placeholder="B-Tech ICT" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="code">Code</label>
+                <input type="text" id="code" name="code" placeholder="BTECH_ICT" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="degree_type">Degree Type</label>
+                <select id="degree_type" name="degree_type" required>
+                    <option value="BTech">BTech</option>
+                    <option value="MTech">MTech</option>
+                    <option value="MSc">MSc</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">+ Add</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><span class="card-title">All Programs</span></div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Name</th><th>Code</th><th>Degree</th></tr></thead>
+            <tbody>
+            {% for p in programs %}
+            <tr>
+                <td style="color:var(--text-primary);font-weight:600;">{{ p.name }}</td>
+                <td><code>{{ p.code }}</code></td>
+                <td><span class="badge badge-core">{{ p.degree_type }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="empty-state"><div class="empty-icon">🎓</div><div class="empty-text">No programs yet</div></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

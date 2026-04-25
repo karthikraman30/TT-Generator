@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="University Timetable Generator - Automated scheduling with slot-based constraint satisfaction">
+    <title>{% block title %}Timetable Generator{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% if session.user %}
+    <!-- ─── SIDEBAR ──────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">⏱</span>
+                <span class="logo-text">TimeTable<span class="logo-accent">Gen</span></span>
+            </div>
+            <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            {% if session.user.role == 'admin' %}
+            <div class="nav-section">
+                <span class="nav-section-title">Overview</span>
+                <a href="{{ url_for('admin.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+                    <span class="nav-icon">📊</span> Dashboard
+                </a>
+            </div>
+            <div class="nav-section">
+                <span class="nav-section-title">Data Management</span>
+                <a href="{{ url_for('admin.upload') }}" class="nav-link {% if request.endpoint == 'admin.upload' %}active{% endif %}">
+                    <span class="nav-icon">📁</span> Upload Data
+                </a>
+                <a href="{{ url_for('admin.semesters') }}" class="nav-link {% if request.endpoint == 'admin.semesters' %}active{% endif %}">
+                    <span class="nav-icon">📅</span> Semesters
+                </a>
+                <a href="{{ url_for('admin.programs') }}" class="nav-link {% if request.endpoint == 'admin.programs' %}active{% endif %}">
+                    <span class="nav-icon">🎓</span> Programs
+                </a>
+                <a href="{{ url_for('admin.faculty_list') }}" class="nav-link {% if request.endpoint == 'admin.faculty_list' %}active{% endif %}">
+                    <span class="nav-icon">👤</span> Faculty
+                </a>
+                <a href="{{ url_for('admin.rooms') }}" class="nav-link {% if request.endpoint == 'admin.rooms' %}active{% endif %}">
+                    <span class="nav-icon">🏫</span> Rooms
+                </a>
+                <a href="{{ url_for('admin.courses') }}" class="nav-link {% if request.endpoint == 'admin.courses' %}active{% endif %}">
+                    <span class="nav-icon">📚</span> Courses
+                </a>
+                <a href="{{ url_for('admin.batches') }}" class="nav-link {% if request.endpoint == 'admin.batches' %}active{% endif %}">
+                    <span class="nav-icon">👥</span> Batches
+                </a>
+            </div>
+            <div class="nav-section">
+                <span class="nav-section-title">Scheduling</span>
+                <a href="{{ url_for('admin.slot_grid') }}" class="nav-link {% if request.endpoint == 'admin.slot_grid' %}active{% endif %}">
+                    <span class="nav-icon">🧩</span> Slot Grid
+                </a>
+                <a href="{{ url_for('admin.timetable') }}" class="nav-link {% if request.endpoint == 'admin.timetable' %}active{% endif %}">
+                    <span class="nav-icon">🗓️</span> Timetable
+                </a>
+                <a href="{{ url_for('admin.violations') }}" class="nav-link {% if request.endpoint == 'admin.violations' %}active{% endif %}">
+                    <span class="nav-icon">⚠️</span> Violations
+                </a>
+            </div>
+            {% else %}
+            <div class="nav-section">
+                <span class="nav-section-title">My Schedule</span>
+                <a href="{{ url_for('faculty.dashboard') }}" class="nav-link {% if request.endpoint == 'faculty.dashboard' %}active{% endif %}">
+                    <span class="nav-icon">📊</span> Dashboard
+                </a>
+                <a href="{{ url_for('faculty.my_timetable') }}" class="nav-link {% if request.endpoint == 'faculty.my_timetable' %}active{% endif %}">
+                    <span class="nav-icon">🗓️</span> My Timetable
+                </a>
+                <a href="{{ url_for('faculty.master_timetable') }}" class="nav-link {% if request.endpoint == 'faculty.master_timetable' %}active{% endif %}">
+                    <span class="nav-icon">📋</span> Master Timetable
+                </a>
+            </div>
+            {% endif %}
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">{{ session.user.abbreviation[:2] }}</div>
+                <div class="user-details">
+                    <span class="user-name">{{ session.user.name }}</span>
+                    <span class="user-role">{{ session.user.role | capitalize }}</span>
+                </div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="nav-link logout-link">
+                <span class="nav-icon">🚪</span> Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- ─── MAIN CONTENT ─────────────────────────────── -->
+    <main class="main-content" id="mainContent">
+        <!-- Top bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu">☰</button>
+                <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+            </div>
+            <div class="topbar-right">
+                {% if session.user.role == 'admin' %}
+                <span class="semester-badge" id="activeSemester">
+                    📅 {% if active_semester %}{{ active_semester.name }}{% else %}No active semester{% endif %}
+                </span>
+                {% endif %}
+            </div>
+        </header>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-container">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}" data-auto-dismiss>
+                <span class="flash-icon">
+                    {% if category == 'success' %}✅{% elif category == 'error' %}❌{% else %}ℹ️{% endif %}
+                </span>
+                <span class="flash-text">{{ message }}</span>
+                <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Page content -->
+        <div class="content-area">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+    {% else %}
+    <!-- Not logged in – just render the content (login page) -->
+    {% block fullpage %}{% endblock %}
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Login — Timetable Generator{% endblock %}
+
+{% block fullpage %}
+<div class="login-wrapper">
+    <div class="login-bg-gradient login-bg-1"></div>
+    <div class="login-bg-gradient login-bg-2"></div>
+
+    <div class="login-card">
+        <div class="login-logo">
+            <span class="logo-icon">⏱</span>
+            <span class="logo-text">TimeTable<span class="logo-accent">Gen</span></span>
+        </div>
+        <p class="login-title">Sign in to your account</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}" style="margin-bottom:1rem;">
+            <span class="flash-text">{{ message }}</span>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- Firebase login button (placeholder — will be wired up with Firebase JS SDK) -->
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="firebaseLoginBtn">
+            🔐 Sign in with Google
+        </button>
+
+        <div class="login-divider">or dev login</div>
+
+        <!-- Dev login form (for testing without Firebase) -->
+        <form action="{{ url_for('auth.dev_login') }}" method="POST">
+            <div class="form-group">
+                <label class="form-label" for="abbreviation">Faculty Abbreviation</label>
+                <input type="text" id="abbreviation" name="abbreviation" placeholder="e.g. PMJ" required>
+            </div>
+            <button type="submit" class="btn btn-secondary" style="width:100%;justify-content:center;">
+                Dev Login
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
