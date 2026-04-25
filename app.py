@@ -25,7 +25,7 @@ from flask import (Flask, render_template_string, request, jsonify,
 # Import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from db_manager import DBManager
-from faculty_pdf import generate_faculty_pdf
+from faculty_pdf import generate_faculty_pdf, generate_faculty_ics
 
 # Firebase Admin SDK (server-side token verification)
 try:
@@ -752,6 +752,18 @@ def build_nav(user, active_page=''):
 
     role_class = 'role-admin' if user['role'] == 'ADMIN' else 'role-faculty'
     role_label = user['role']
+    current_semester = os.getenv('SEMESTER', 'Winter-2026')
+
+    semester_html = ''
+    if user['role'] == 'ADMIN':
+        semester_html = f'''
+            <span style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.15));
+                         color:var(--accent-primary);border:1px solid rgba(99,102,241,0.3);
+                         padding:0.25rem 0.75rem;border-radius:6px;font-size:0.75rem;
+                         font-weight:600;letter-spacing:0.02em;">
+                📅 {current_semester}
+            </span>
+        '''
 
     return f'''
     <nav>
@@ -759,6 +771,7 @@ def build_nav(user, active_page=''):
             <div class="nav-brand">📅 Timetable Generator</div>
             <ul class="nav-links">{links}</ul>
             <div class="nav-user">
+                {semester_html}
                 <span class="user-email">{user["email"]}</span>
                 <span class="user-role {role_class}">{role_label}</span>
                 <a href="{url_for("logout")}" class="btn-logout">Logout</a>
@@ -1191,10 +1204,16 @@ def faculty_dashboard():
     <h1><span class="icon">👨‍🏫</span>Welcome, Prof. {faculty_name}</h1>
     <p class="subtitle">Your personal teaching schedule for this semester</p>
 
-    <div style="margin-bottom: 1.5rem;">
-        <a href="{url_for('faculty_download_pdf')}" class="btn btn-green">
-            📄 Download My Timetable (PDF)
+    <div style="margin-bottom: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+        <a href="{url_for('faculty_download_pdf')}" class="btn btn-green" style="display:inline-flex;align-items:center;gap:0.4rem;">
+            📄 Download PDF
         </a>
+        <a href="{url_for('faculty_download_ics')}" class="btn" style="display:inline-flex;align-items:center;gap:0.4rem;background:linear-gradient(135deg,#10b981,#06b6d4);">
+            📅 Add to Google Calendar / iCal
+        </a>
+        <span style="font-size:0.75rem;color:var(--text-muted);">
+            ICS works with Google Calendar, Apple Calendar &amp; Outlook
+        </span>
     </div>
 
     {grid_html}
@@ -1262,6 +1281,34 @@ def faculty_download_pdf():
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = \
         f'attachment; filename=Timetable_{faculty_name}.pdf'
+    return response
+
+
+@app.route('/faculty/download-ics')
+@login_required
+def faculty_download_ics():
+    """Faculty downloads their timetable as an ICS / Google Calendar file."""
+    user = get_current_user()
+    faculty_name = user.get('faculty_short_name', '')
+    if not faculty_name:
+        return "No faculty profile linked", 400
+
+    db = DBManager(quiet=True)
+    try:
+        ics_bytes = generate_faculty_ics(
+            db,
+            faculty_name,
+            semester_start=os.getenv('SEMESTER_START', '2026-01-06'),
+            semester_weeks=int(os.getenv('SEMESTER_WEEKS', '16')),
+            timezone=os.getenv('SEMESTER_TIMEZONE', 'Asia/Kolkata'),
+        )
+    finally:
+        db.close()
+
+    response = make_response(ics_bytes)
+    response.headers['Content-Type'] = 'text/calendar; charset=utf-8'
+    response.headers['Content-Disposition'] = \
+        f'attachment; filename=Timetable_{faculty_name}.ics'
     return response
 
 
@@ -1756,8 +1803,12 @@ def admin_faculty_pdfs():
                 <div class="name">👨‍🏫 {f}</div>
                 <div class="classes">{count} sessions/week</div>
             </div>
-            <a href="{url_for("admin_download_faculty_pdf", short_name=f)}"
-               class="btn btn-sm btn-green">📄 PDF</a>
+            <div style="display:flex;gap:0.4rem;">
+                <a href="{url_for("admin_download_faculty_pdf", short_name=f)}"
+                   class="btn btn-sm btn-green">📄 PDF</a>
+                <a href="{url_for("admin_download_faculty_ics", short_name=f)}"
+                   class="btn btn-sm" style="background:rgba(6,182,212,0.15);color:var(--accent-cyan);border:1px solid rgba(6,182,212,0.3);">📅 ICS</a>
+            </div>
         </div>'''
 
     content = f'''
@@ -1792,6 +1843,29 @@ def admin_download_faculty_pdf(short_name):
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = \
         f'attachment; filename=Timetable_{short_name}.pdf'
+    return response
+
+
+@app.route('/admin/download-faculty-ics/<short_name>')
+@admin_required
+def admin_download_faculty_ics(short_name):
+    """Admin downloads a specific faculty member's ICS calendar."""
+    db = DBManager(quiet=True)
+    try:
+        ics_bytes = generate_faculty_ics(
+            db,
+            short_name,
+            semester_start=os.getenv('SEMESTER_START', '2026-01-06'),
+            semester_weeks=int(os.getenv('SEMESTER_WEEKS', '16')),
+            timezone=os.getenv('SEMESTER_TIMEZONE', 'Asia/Kolkata'),
+        )
+    finally:
+        db.close()
+
+    response = make_response(ics_bytes)
+    response.headers['Content-Type'] = 'text/calendar; charset=utf-8'
+    response.headers['Content-Disposition'] = \
+        f'attachment; filename=Timetable_{short_name}.ics'
     return response
 
 
@@ -2764,10 +2838,19 @@ def admin_history():
         }}).then(function(r) {{ return r.json(); }}).then(function(d) {{
             var el = document.getElementById('hist-msg');
             if (d.success) {{
-                el.textContent = 'Restored! ' + d.restored + ' entries loaded, ' + d.skipped + ' skipped.';
-                el.style.background = 'rgba(16,185,129,0.1)';
-                el.style.border = '1px solid rgba(16,185,129,0.3)';
-                el.style.color = 'var(--accent-green)';
+                var msg = '✓ Restored! ' + d.restored + ' entries loaded';
+                if (d.skipped > 0) {{
+                    msg += ', ⚠️ ' + d.skipped + ' entries skipped (referenced rooms, faculty, or batches may no longer exist in the current database)';
+                    el.style.background = 'rgba(245,158,11,0.1)';
+                    el.style.border = '1px solid rgba(245,158,11,0.3)';
+                    el.style.color = 'var(--accent-amber)';
+                }} else {{
+                    msg += '.';
+                    el.style.background = 'rgba(16,185,129,0.1)';
+                    el.style.border = '1px solid rgba(16,185,129,0.3)';
+                    el.style.color = 'var(--accent-green)';
+                }}
+                el.textContent = msg;
             }} else {{
                 el.textContent = 'Restore failed: ' + d.error;
                 el.style.background = 'rgba(239,68,68,0.1)';
@@ -2857,6 +2940,30 @@ def admin_configuration():
         # Overlap rules
         db.cur.execute("SELECT rule_id, batch_a, section_a, batch_b, section_b, description FROM batch_overlap_rule ORDER BY rule_id")
         overlaps = db.cur.fetchall()
+
+        # L-Trimming overrides
+        semester = os.getenv('SEMESTER', 'Winter-2026')
+        try:
+            db.cur.execute("""
+                SELECT override_id, course_code, keep_days, semester
+                FROM l_trimming_override WHERE semester = %s ORDER BY course_code
+            """, (semester,))
+            ltrim_overrides = db.cur.fetchall()
+        except Exception:
+            ltrim_overrides = []
+
+        # Faculty name mappings
+        try:
+            db.cur.execute("""
+                SELECT fnm.short_name, fnm.full_name, fnm.source,
+                       COALESCE(f.name, '—') as faculty_name
+                FROM faculty_name_map fnm
+                LEFT JOIN faculty f ON fnm.short_name = f.short_name
+                ORDER BY fnm.short_name
+            """)
+            fac_names = db.cur.fetchall()
+        except Exception:
+            fac_names = []
     finally:
         db.close()
 
@@ -2927,9 +3034,31 @@ def admin_configuration():
                 <td><button class="btn-delete" onclick="deleteOverlap({oid})">Delete</button></td>
             </tr>'''
 
+    # Build L-Trimming overrides table
+    ltrim_rows = ''
+    for oid, code, keep_days, sem in ltrim_overrides:
+        days_str = ', '.join(keep_days) if keep_days else '—'
+        ltrim_rows += f'''
+            <tr>
+                <td><strong>{code}</strong></td>
+                <td>{days_str}</td>
+                <td>{sem}</td>
+                <td><button class="btn-delete" onclick="deleteLTrim({oid})">Delete</button></td>
+            </tr>'''
+
+    # Build Faculty Names table
+    fac_name_rows = ''
+    for sn, fn, src, curr_name in fac_names:
+        fac_name_rows += f'''
+            <tr>
+                <td><strong>{sn}</strong></td>
+                <td>{fn}</td>
+                <td><span style="font-size:0.75rem;opacity:0.6;">{src}</span></td>
+            </tr>'''
+
     content = f'''
     <h1><span class="icon">⚙️</span>Configuration</h1>
-    <p class="subtitle">Manage rooms, batch sizes, elective enrollments, slot matrix, and batch overlaps</p>
+    <p class="subtitle">Manage rooms, batches, electives, slot matrix, overlaps, L-trimming overrides, and faculty names</p>
 
     <div id="cfg-msg" style="display:none;padding:0.75rem 1rem;border-radius:8px;font-size:0.85rem;margin-bottom:1rem;"></div>
 
@@ -2937,9 +3066,11 @@ def admin_configuration():
     <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
         <button class="tab-btn active" onclick="switchTab('rooms', this)">🏫 Rooms ({len(rooms)})</button>
         <button class="tab-btn" onclick="switchTab('batches', this)">👥 Batches ({len(batches)})</button>
-        <button class="tab-btn" onclick="switchTab('electives', this)">📚 Elective Enrollment ({len(electives)})</button>
+        <button class="tab-btn" onclick="switchTab('electives', this)">📚 Electives ({len(electives)})</button>
         <button class="tab-btn" onclick="switchTab('slots', this)">🕐 Slot Matrix</button>
-        <button class="tab-btn" onclick="switchTab('overlaps', this)">🔗 Batch Overlaps ({len(overlaps)})</button>
+        <button class="tab-btn" onclick="switchTab('overlaps', this)">🔗 Overlaps ({len(overlaps)})</button>
+        <button class="tab-btn" onclick="switchTab('ltrim', this)">✂️ L-Trimming ({len(ltrim_overrides)})</button>
+        <button class="tab-btn" onclick="switchTab('facnames', this)">👤 Faculty Names ({len(fac_names)})</button>
     </div>
 
     <!-- ROOMS TAB -->
@@ -3098,6 +3229,72 @@ def admin_configuration():
         </div>
     </div>
 
+    <!-- L-TRIMMING TAB -->
+    <div id="tab-ltrim" class="tab-content" style="display:none;">
+        <div class="table-container">
+            <div class="table-header">
+                <h2>✂️ L-Value Trimming Overrides</h2>
+                <span class="table-count">Specify which days to keep when L &lt; slot sessions</span>
+            </div>
+            <div style="padding:1rem;">
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">
+                    When a course has fewer lecture hours (L) than its slot provides, the algorithm
+                    automatically picks the most spaced-out days. Use overrides to manually choose which days to keep.
+                </p>
+                <form onsubmit="addLTrim(event)" style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+                    <div class="filter-group">
+                        <label>Course Code</label>
+                        <input type="text" id="lt-code" placeholder="e.g. IT301" required style="width:120px;">
+                    </div>
+                    <div class="filter-group">
+                        <label>Keep Days (comma-separated)</label>
+                        <input type="text" id="lt-days" placeholder="Monday, Friday" required style="width:200px;">
+                    </div>
+                    <button type="submit" class="btn btn-green">+ Add Override</button>
+                </form>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead><tr><th>Course Code</th><th>Keep Days</th><th>Semester</th><th>Actions</th></tr></thead>
+                    <tbody>{ltrim_rows}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- FACULTY NAMES TAB -->
+    <div id="tab-facnames" class="tab-content" style="display:none;">
+        <div class="table-container">
+            <div class="table-header">
+                <h2>👤 Faculty Name Mappings</h2>
+                <span class="table-count">Maps short codes to full academic names (used in PDFs &amp; ICS)</span>
+            </div>
+            <div style="padding:1rem;">
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">
+                    These mappings are auto-populated from <code>Winter2026_Electives.xlsx</code> via
+                    <code>python update_faculty_names.py</code>. You can also add/edit mappings manually below.
+                </p>
+                <form onsubmit="addFacName(event)" style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+                    <div class="filter-group">
+                        <label>Short Name</label>
+                        <input type="text" id="fn-short" placeholder="e.g. PMJ" required style="width:100px;">
+                    </div>
+                    <div class="filter-group">
+                        <label>Full Name</label>
+                        <input type="text" id="fn-full" placeholder="e.g. Pokhar M Jat" required style="width:220px;">
+                    </div>
+                    <button type="submit" class="btn btn-green">+ Add / Update</button>
+                </form>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead><tr><th>Short Name</th><th>Full Name</th><th>Source</th></tr></thead>
+                    <tbody>{fac_name_rows}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script>
     function switchTab(name, btn) {{
         document.querySelectorAll('.tab-content').forEach(function(el) {{ el.style.display = 'none'; }});
@@ -3196,6 +3393,30 @@ def admin_configuration():
             section_b: document.getElementById('ov-sb').value,
             description: document.getElementById('ov-desc').value
         }}).then(function(d) {{ if (d.success) location.reload(); else showMsg(d.error, true); }});
+    }}
+
+    // L-Trimming
+    function deleteLTrim(oid) {{
+        if (!confirm('Delete this L-trimming override?')) return;
+        cfgPost('/api/admin/config/ltrim/delete', {{ override_id: oid }})
+            .then(function(d) {{ if (d.success) location.reload(); else showMsg(d.error, true); }});
+    }}
+    function addLTrim(e) {{
+        e.preventDefault();
+        var code = document.getElementById('lt-code').value;
+        var daysRaw = document.getElementById('lt-days').value;
+        var days = daysRaw.split(',').map(function(s) {{ return s.trim(); }}).filter(function(s) {{ return s.length > 0; }});
+        cfgPost('/api/admin/config/ltrim', {{ course_code: code, keep_days: days }})
+            .then(function(d) {{ if (d.success) location.reload(); else showMsg(d.error, true); }});
+    }}
+
+    // Faculty Names
+    function addFacName(e) {{
+        e.preventDefault();
+        var short_name = document.getElementById('fn-short').value;
+        var full_name = document.getElementById('fn-full').value;
+        cfgPost('/api/admin/config/faculty-name', {{ short_name: short_name, full_name: full_name }})
+            .then(function(d) {{ if (d.success) location.reload(); else showMsg(d.error, true); }});
     }}
     </script>
     '''
@@ -3328,6 +3549,98 @@ def api_config_overlap_delete():
         db.delete_overlap_rule(data['rule_id'])
         return jsonify({'success': True})
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/config/ltrim', methods=['POST'])
+@admin_required
+def api_config_ltrim():
+    """Add or update an L-trimming override."""
+    data = request.get_json()
+    code = data.get('course_code', '').strip()
+    keep_days = data.get('keep_days', [])
+    semester = os.getenv('SEMESTER', 'Winter-2026')
+
+    valid_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'}
+    for d in keep_days:
+        if d not in valid_days:
+            return jsonify({'success': False, 'error': f'Invalid day: {d}. Must be one of {valid_days}'}), 400
+
+    if not code or not keep_days:
+        return jsonify({'success': False, 'error': 'Course code and at least one day required'}), 400
+
+    db = DBManager(quiet=True)
+    try:
+        db.cur.execute("""
+            INSERT INTO l_trimming_override (course_code, semester, keep_days)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (course_code, semester) DO UPDATE
+            SET keep_days = EXCLUDED.keep_days
+        """, (code, semester, keep_days))
+        db.conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/admin/config/ltrim/delete', methods=['POST'])
+@admin_required
+def api_config_ltrim_delete():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.cur.execute("DELETE FROM l_trimming_override WHERE override_id = %s",
+                       (data['override_id'],))
+        db.conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+
+@app.route('/api/admin/config/faculty-name', methods=['POST'])
+@admin_required
+def api_config_faculty_name():
+    """Add or update a faculty name mapping."""
+    data = request.get_json()
+    short_name = data.get('short_name', '').strip()
+    full_name = data.get('full_name', '').strip()
+
+    if not short_name or not full_name:
+        return jsonify({'success': False, 'error': 'Short name and full name required'}), 400
+
+    db = DBManager(quiet=True)
+    try:
+        # Ensure the short_name exists in faculty table first
+        db.cur.execute("SELECT faculty_id FROM faculty WHERE short_name = %s", (short_name,))
+        fac_row = db.cur.fetchone()
+        if not fac_row:
+            return jsonify({'success': False,
+                           'error': f'Faculty "{short_name}" not found in faculty table. '
+                                    f'Upload timetable data first to populate the faculty table.'}), 400
+
+        # Upsert into faculty_name_map
+        db.cur.execute("""
+            INSERT INTO faculty_name_map (short_name, full_name, source)
+            VALUES (%s, %s, 'Admin UI')
+            ON CONFLICT (short_name) DO UPDATE
+            SET full_name = EXCLUDED.full_name, source = 'Admin UI',
+                updated_at = CURRENT_TIMESTAMP
+        """, (short_name, full_name))
+
+        # Also update faculty.name
+        db.cur.execute("UPDATE faculty SET name = %s WHERE short_name = %s",
+                       (full_name, short_name))
+        db.conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.conn.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         db.close()

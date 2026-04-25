@@ -165,12 +165,15 @@ class DBManager:
         return matrix
 
     def get_overlap_rules(self):
-        """Read batch overlap rules from DB. Returns list of tuples."""
+        """Read batch overlap rules from DB. Returns list of dicts with keys:
+        batch_a, section_a, batch_b, section_b, description.
+        """
         self.cur.execute("""
             SELECT batch_a, section_a, batch_b, section_b, description
             FROM batch_overlap_rule ORDER BY rule_id
         """)
-        return self.cur.fetchall()
+        columns = ['batch_a', 'section_a', 'batch_b', 'section_b', 'description']
+        return [dict(zip(columns, row)) for row in self.cur.fetchall()]
 
     # =========================================================================
     # CONFIG WRITERS: CRUD operations for admin UI
@@ -417,7 +420,7 @@ class DBManager:
     # STORE INPUT DATA: Excel courses → PostgreSQL entity tables
     # =========================================================================
 
-    def store_input_data(self, courses):
+    def store_input_data(self, courses, semester=None):
         """
         Take the in-memory courses list (from parse_excel) and mirror it to
         PostgreSQL entity tables.
@@ -429,7 +432,10 @@ class DBManager:
             courses: List of course dicts from parse_excel()
                      Each dict has: batch, sub_batch, row_sec, course_code,
                      course_name, ltpc, type, faculty, room, is_core, original_slot
+            semester: Semester label (e.g., 'Winter-2026'). Defaults to SEMESTER env var.
         """
+        if semester is None:
+            semester = os.getenv('SEMESTER', 'Winter-2026')
         try:
             # Clear previous run data from result tables only
             self.cur.execute("TRUNCATE master_timetable CASCADE;")
@@ -463,6 +469,21 @@ class DBManager:
                     )
                     self._faculty_cache[fac] = self.cur.fetchone()[0]
 
+            # Auto-populate faculty.name from faculty_name_map if available
+            try:
+                self.cur.execute("""
+                    UPDATE faculty f
+                    SET name = fnm.full_name
+                    FROM faculty_name_map fnm
+                    WHERE f.short_name = fnm.short_name
+                      AND (f.name IS NULL OR f.name != fnm.full_name)
+                """)
+                name_count = self.cur.rowcount
+                if name_count > 0:
+                    self._log(f"  ✓ Auto-populated {name_count} faculty full names from faculty_name_map")
+            except Exception:
+                pass  # Table might not exist yet on first run
+
             # 2. Extract and insert unique courses
             course_codes_seen = set()
             course_count = 0
@@ -482,10 +503,30 @@ class DBManager:
                     p_hrs = int(ltpc_match.group(3))
                     creds = int(ltpc_match.group(4))
 
-                # Normalize course type
+                # Normalize course type to match CHECK constraint values
                 c_type = c.get('type', 'Core').strip()
                 if c_type.lower() == 'nan' or not c_type:
                     c_type = 'Core'
+                # Map common variations to valid enum values
+                type_map = {
+                    'te': 'Technical Elective',
+                    'technical elective': 'Technical Elective',
+                    'hass elective': 'HASS Elective',
+                    'open elective': 'Open Elective',
+                    'specialization': 'Specialization',
+                    'lab': 'Lab',
+                    'project': 'Project',
+                    'seminar': 'Seminar',
+                    'audit': 'Audit',
+                    'minor': 'Minor',
+                }
+                c_type_lower = c_type.lower()
+                if c_type_lower in type_map:
+                    c_type = type_map[c_type_lower]
+                elif c_type not in ('Core', 'Technical Elective', 'HASS Elective',
+                                     'Open Elective', 'Specialization', 'Lab',
+                                     'Project', 'Seminar', 'Audit', 'Minor', 'Other'):
+                    c_type = 'Other'
 
                 # Clean course name (remove section annotations)
                 name = c.get('course_name', '').strip()
@@ -494,11 +535,11 @@ class DBManager:
 
                 self.cur.execute(
                     """INSERT INTO course (course_code, course_name, lecture_hrs,
-                       tutorial_hrs, practical_hrs, credits, ltpc, course_type)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                       ON CONFLICT (course_code) DO NOTHING
+                       tutorial_hrs, practical_hrs, credits, ltpc, course_type, semester)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (course_code, semester) DO NOTHING
                        RETURNING course_id""",
-                    (code, clean_name, l_hrs, t_hrs, p_hrs, creds, ltpc, c_type)
+                    (code, clean_name, l_hrs, t_hrs, p_hrs, creds, ltpc, c_type, semester)
                 )
                 row = self.cur.fetchone()
                 if row:
@@ -506,8 +547,8 @@ class DBManager:
                     course_count += 1
                 else:
                     self.cur.execute(
-                        "SELECT course_id FROM course WHERE course_code = %s",
-                        (code,)
+                        "SELECT course_id FROM course WHERE course_code = %s AND semester = %s",
+                        (code, semester)
                     )
                     self._course_cache[code] = self.cur.fetchone()[0]
 
@@ -569,11 +610,11 @@ class DBManager:
             batch_count = 0
             for (batch_name, sb, sec) in sorted(batches):
                 self.cur.execute(
-                    """INSERT INTO student_batch (program_name, sub_batch, section)
-                       VALUES (%s, %s, %s)
-                       ON CONFLICT (sub_batch, section) DO NOTHING
+                    """INSERT INTO student_batch (program_name, sub_batch, section, semester)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT (sub_batch, section, semester) DO NOTHING
                        RETURNING batch_id""",
-                    (batch_name, sb, sec)
+                    (batch_name, sb, sec, semester)
                 )
                 row = self.cur.fetchone()
                 if row:
@@ -581,8 +622,8 @@ class DBManager:
                     batch_count += 1
                 else:
                     self.cur.execute(
-                        "SELECT batch_id FROM student_batch WHERE sub_batch = %s AND section = %s",
-                        (sb, sec)
+                        "SELECT batch_id FROM student_batch WHERE sub_batch = %s AND section = %s AND semester = %s",
+                        (sb, sec, semester)
                     )
                     self._batch_cache[(sb, sec)] = self.cur.fetchone()[0]
 
@@ -603,11 +644,11 @@ class DBManager:
                     continue
 
                 self.cur.execute(
-                    """INSERT INTO faculty_course_map (faculty_id, course_id)
-                       VALUES (%s, %s)
-                       ON CONFLICT (faculty_id, course_id) DO NOTHING
+                    """INSERT INTO faculty_course_map (faculty_id, course_id, semester)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (faculty_id, course_id, semester) DO NOTHING
                        RETURNING assignment_id""",
-                    (fac_id, course_id)
+                    (fac_id, course_id, semester)
                 )
                 row = self.cur.fetchone()
                 if row:
@@ -616,8 +657,8 @@ class DBManager:
                 else:
                     self.cur.execute(
                         """SELECT assignment_id FROM faculty_course_map
-                           WHERE faculty_id = %s AND course_id = %s""",
-                        (fac_id, course_id)
+                           WHERE faculty_id = %s AND course_id = %s AND semester = %s""",
+                        (fac_id, course_id, semester)
                     )
                     self._assignment_cache[(fac_id, course_id)] = self.cur.fetchone()[0]
 
@@ -786,11 +827,12 @@ class DBManager:
                         self.cur.execute(
                             """INSERT INTO master_timetable
                                (assignment_id, batch_id, room_id, slot_id,
-                                 is_moved, original_slot_group)
-                               VALUES (%s, %s, %s, %s, %s, %s)
+                                 is_moved, original_slot_group, semester)
+                               VALUES (%s, %s, %s, %s, %s, %s, %s)
                                ON CONFLICT (assignment_id, batch_id, slot_id) DO NOTHING""",
                             (assignment_id, batch_id, room_id, slot_id,
-                             is_moved, original_slot)
+                             is_moved, original_slot,
+                             os.getenv('SEMESTER', 'Winter-2026'))
                         )
                         rows_affected = self.cur.rowcount  # capture BEFORE release
                         self.cur.execute("RELEASE SAVEPOINT sp_insert")

@@ -2,9 +2,18 @@
 -- University Timetable Generator — PostgreSQL Schema
 -- Database: timetable_generator_db
 -- Design: Third Normal Form (3NF) with composite UNIQUE constraints
+--
+-- CHANGES (Phase 1 — Overhaul):
+--   - Added 'semester' column to course, student_batch, master_timetable,
+--     faculty_course_map for multi-semester isolation
+--   - Normalized course_type with CHECK constraint (fixes is_core misclassification)
+--   - Added faculty_name_map for short→full name resolution
+--   - Added l_trimming_override for admin L-value period selection
 -- ============================================================================
 
 -- Drop tables in reverse dependency order (for clean re-runs)
+DROP TABLE IF EXISTS l_trimming_override CASCADE;
+DROP TABLE IF EXISTS faculty_name_map CASCADE;
 DROP TABLE IF EXISTS timetable_snapshot CASCADE;
 DROP TABLE IF EXISTS batch_overlap_rule CASCADE;
 DROP TABLE IF EXISTS elective_enrollment CASCADE;
@@ -40,14 +49,31 @@ CREATE TABLE faculty (
 
 COMMENT ON TABLE faculty IS 'Teaching staff records with unique short names for timetable display';
 COMMENT ON COLUMN faculty.short_name IS 'Unique code used in timetable (e.g., PMJ, ST, HSJ)';
+COMMENT ON COLUMN faculty.name IS 'Full academic name (e.g., Pokhar M Jat) — populated via faculty_name_map';
+
+-- ============================================================================
+-- 1b. FACULTY NAME MAP
+-- Maps short names to full academic names. Source of truth for name resolution.
+-- Populated from Winter2026_Electives.xlsx or admin UI.
+-- ============================================================================
+CREATE TABLE faculty_name_map (
+    short_name   VARCHAR(20) PRIMARY KEY REFERENCES faculty(short_name) ON DELETE CASCADE,
+    full_name    VARCHAR(100) NOT NULL,
+    source       VARCHAR(50) DEFAULT 'Excel',
+    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE faculty_name_map IS 'Maps faculty short codes to full academic names for PDFs and exports';
+COMMENT ON COLUMN faculty_name_map.source IS 'Where this mapping came from: Excel, Admin UI, Manual';
 
 -- ============================================================================
 -- 2. COURSE TABLE
 -- Stores subject metadata including the L-T-P-C credit structure.
+-- course_type is normalized to strict enum values.
 -- ============================================================================
 CREATE TABLE course (
     course_id    SERIAL PRIMARY KEY,
-    course_code  VARCHAR(20) NOT NULL UNIQUE,
+    course_code  VARCHAR(20) NOT NULL,
     course_name  VARCHAR(150) NOT NULL,
     lecture_hrs  INT DEFAULT 0,
     tutorial_hrs INT DEFAULT 0,
@@ -55,12 +81,26 @@ CREATE TABLE course (
     credits      INT DEFAULT 0,
     ltpc         VARCHAR(15),
     course_type  VARCHAR(80) NOT NULL DEFAULT 'Core',
-    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    semester     VARCHAR(20) NOT NULL DEFAULT 'Winter-2026',
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Course code is unique PER SEMESTER (same code can exist in multiple semesters)
+    CONSTRAINT uq_course_semester UNIQUE (course_code, semester),
+
+    -- Enforce clean course types to prevent is_core() misclassification.
+    -- 'Core' means a mandatory course. Everything else is NOT core.
+    CONSTRAINT chk_course_type CHECK (course_type IN (
+        'Core',
+        'Technical Elective', 'HASS Elective', 'Open Elective',
+        'Specialization', 'Lab', 'Project', 'Seminar',
+        'Audit', 'Minor', 'Other'
+    ))
 );
 
 COMMENT ON TABLE course IS 'Academic course catalogue with L-T-P-C credit structure';
 COMMENT ON COLUMN course.ltpc IS 'Lecture-Tutorial-Practical-Credits string (e.g., 3-0-0-3)';
-COMMENT ON COLUMN course.course_type IS 'Course classification — Core, Technical Elective, HASS Elective, Open Elective, Specialization, etc.';
+COMMENT ON COLUMN course.course_type IS 'Normalized: Core, Technical Elective, HASS Elective, etc. Only "Core" triggers core-course constraints';
+COMMENT ON COLUMN course.semester IS 'Semester this course offering belongs to (e.g., Winter-2026)';
 
 -- ============================================================================
 -- 3. STUDENT BATCH TABLE
@@ -73,14 +113,15 @@ CREATE TABLE student_batch (
     section      VARCHAR(20) NOT NULL DEFAULT 'All',
     year         INT,
     headcount    INT DEFAULT 0,
+    semester     VARCHAR(20) NOT NULL DEFAULT 'Winter-2026',
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT uq_batch_identity UNIQUE (sub_batch, section),
+    CONSTRAINT uq_batch_identity UNIQUE (sub_batch, section, semester),
     CONSTRAINT chk_headcount CHECK (headcount >= 0)
 );
 
 COMMENT ON TABLE student_batch IS 'Student cohorts defined by program, sub-batch, and section';
-COMMENT ON COLUMN student_batch.sub_batch IS 'E.g., ICT + CS, CS-Only, MnC';
+COMMENT ON COLUMN student_batch.sub_batch IS 'E.g., BTech Sem-II (ICT + CS), BTech Sem-IV (MnC)';
 COMMENT ON COLUMN student_batch.section IS 'E.g., Sec A, Sec B, or All';
 
 -- ============================================================================
@@ -129,12 +170,13 @@ CREATE TABLE faculty_course_map (
     assignment_id SERIAL PRIMARY KEY,
     faculty_id   INT NOT NULL REFERENCES faculty(faculty_id) ON DELETE CASCADE,
     course_id    INT NOT NULL REFERENCES course(course_id) ON DELETE CASCADE,
+    semester     VARCHAR(20) NOT NULL DEFAULT 'Winter-2026',
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT uq_faculty_course UNIQUE (faculty_id, course_id)
+    CONSTRAINT uq_faculty_course_semester UNIQUE (faculty_id, course_id, semester)
 );
 
-COMMENT ON TABLE faculty_course_map IS 'Junction table: authorizes faculty-course pairings. assignment_id is used by Master_Timetable';
+COMMENT ON TABLE faculty_course_map IS 'Junction table: authorizes faculty-course pairings per semester';
 COMMENT ON COLUMN faculty_course_map.assignment_id IS 'Surrogate key — Master_Timetable references this, NOT faculty_id or course_id directly';
 
 -- ============================================================================
@@ -176,7 +218,7 @@ CREATE TABLE scheduling_constraint (
 
 COMMENT ON TABLE scheduling_constraint IS 'Scheduling rules stored as data — queryable, toggleable, auditable';
 COMMENT ON COLUMN scheduling_constraint.constraint_type IS 'HARD = must be satisfied; SOFT = optimization goal';
-COMMENT ON COLUMN scheduling_constraint.enforcement_level IS 'DATABASE = enforced via UNIQUE/CHECK; APPLICATION = enforced in Python CSP solver';
+COMMENT ON COLUMN scheduling_constraint.enforcement_level IS 'DATABASE = enforced via UNIQUE/CHECK; APPLICATION = enforced in Python solver';
 COMMENT ON COLUMN scheduling_constraint.parameters_json IS 'Rule-specific parameters as JSON (e.g., {"max_consecutive": 2})';
 
 -- ============================================================================
@@ -192,6 +234,7 @@ CREATE TABLE master_timetable (
     slot_id        INT NOT NULL REFERENCES time_slot(slot_id) ON DELETE CASCADE,
     is_moved       BOOLEAN DEFAULT FALSE,
     original_slot_group VARCHAR(15),
+    semester       VARCHAR(20) NOT NULL DEFAULT 'Winter-2026',
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     -- === DATABASE-LEVEL CONSTRAINT ENFORCEMENT ("Hard Locks") ===
@@ -202,18 +245,19 @@ CREATE TABLE master_timetable (
 
     -- NOTE: UNIQUE(batch_id, slot_id) is NOT here because:
     --   Elective courses CAN share the same time slot for a batch.
-    --   This constraint is enforced by the CSP solver (application layer)
+    --   This constraint is enforced by the solver (application layer)
     --   which distinguishes between core (no overlap) and elective (overlap OK).
 
     -- NOTE: UNIQUE(room_id, slot_id) is NOT here because:
     --   Elective courses sharing a slot often share the same room assignment.
-    --   Room conflicts for CORE courses are enforced by the CSP solver.
+    --   Room conflicts for CORE courses are enforced by the solver.
 );
 
 COMMENT ON TABLE master_timetable IS 'Central fact table: final generated schedule using FK-only references';
 COMMENT ON COLUMN master_timetable.assignment_id IS 'Links to faculty_course_map — inherits pre-approved faculty-course pairing';
-COMMENT ON COLUMN master_timetable.is_moved IS 'TRUE if the CSP solver moved this course from its original slot';
+COMMENT ON COLUMN master_timetable.is_moved IS 'TRUE if the solver moved this course from its original slot';
 COMMENT ON COLUMN master_timetable.original_slot_group IS 'The slot group from the input Excel (before solver reassignment)';
+COMMENT ON COLUMN master_timetable.semester IS 'Semester this schedule entry belongs to';
 
 -- ============================================================================
 -- 10. CONSTRAINT VIOLATION LOG (Audit Trail)
@@ -273,7 +317,8 @@ COMMENT ON TABLE elective_enrollment IS 'Actual enrollment numbers for elective 
 
 -- ============================================================================
 -- 13. BATCH OVERLAP RULE TABLE
--- Defines which student batches share students (e.g., ICT+CS minors in ICT Sec B).
+-- Defines which student batches share students (e.g., CS-Only ⊆ ICT Sec B).
+-- Used by is_overlap() instead of hardcoded checks.
 -- ============================================================================
 CREATE TABLE batch_overlap_rule (
     rule_id     SERIAL PRIMARY KEY,
@@ -306,6 +351,24 @@ CREATE TABLE timetable_snapshot (
 COMMENT ON TABLE timetable_snapshot IS 'Complete timetable snapshots for versioning — stores full grid as JSONB';
 
 -- ============================================================================
+-- 15. L-TRIMMING OVERRIDE TABLE
+-- Allows admin to manually choose which periods to keep when L < slot sessions.
+-- If no override exists, the algorithm uses max-spacing heuristic.
+-- ============================================================================
+CREATE TABLE l_trimming_override (
+    override_id   SERIAL PRIMARY KEY,
+    course_code   VARCHAR(20) NOT NULL,
+    semester      VARCHAR(20) NOT NULL DEFAULT 'Winter-2026',
+    keep_days     TEXT[] NOT NULL,  -- e.g., ARRAY['Monday', 'Friday']
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_ltrim_course_semester UNIQUE (course_code, semester)
+);
+
+COMMENT ON TABLE l_trimming_override IS 'Admin overrides for L-value period selection. Algorithm uses max-spacing heuristic when no override exists.';
+COMMENT ON COLUMN l_trimming_override.keep_days IS 'Array of day names to keep (e.g., {Monday,Friday} for L=2 in a 3-session slot)';
+
+-- ============================================================================
 -- INDEXES (Performance Optimization)
 -- ============================================================================
 
@@ -315,11 +378,17 @@ CREATE INDEX idx_faculty_short_name ON faculty(short_name);
 -- Course lookups by code (used during Excel → DB loading)
 CREATE INDEX idx_course_code ON course(course_code);
 
+-- Course lookups by semester
+CREATE INDEX idx_course_semester ON course(semester);
+
 -- Room lookups by number
 CREATE INDEX idx_room_number ON room(room_number);
 
 -- Batch lookups by sub_batch + section
 CREATE INDEX idx_batch_identity ON student_batch(sub_batch, section);
+
+-- Batch lookups by semester
+CREATE INDEX idx_batch_semester ON student_batch(semester);
 
 -- Time slot lookups by slot_group (used to map slot names to IDs)
 CREATE INDEX idx_slot_group ON time_slot(slot_group);
@@ -327,12 +396,18 @@ CREATE INDEX idx_slot_group ON time_slot(slot_group);
 -- Master timetable by slot (for schedule queries)
 CREATE INDEX idx_timetable_slot ON master_timetable(slot_id);
 
+-- Master timetable by semester
+CREATE INDEX idx_timetable_semester ON master_timetable(semester);
+
 -- Violation log by timestamp (for recent violations)
 CREATE INDEX idx_violation_time ON constraint_violation_log(detected_at DESC);
 
 -- User role lookups by email and role
 CREATE INDEX idx_user_role_email ON user_role(email);
 CREATE INDEX idx_user_role_role ON user_role(role);
+
+-- Faculty course map by semester
+CREATE INDEX idx_fcm_semester ON faculty_course_map(semester);
 
 -- ============================================================================
 -- VIEWS (Human-Readable Queries)
@@ -350,38 +425,17 @@ SELECT
     c.course_name,
     c.course_type,
     c.ltpc,
+    c.lecture_hrs,
     f.short_name AS faculty_short_name,
-    f.name AS faculty_full_name,
+    COALESCE(fnm.full_name, f.name, f.short_name) AS faculty_full_name,
     sb.sub_batch,
     sb.section,
     sb.program_name,
     r.room_number,
     r.capacity AS room_capacity,
     mt.is_moved,
-    mt.original_slot_group
-FROM master_timetable mt
-JOIN faculty_course_map fcm ON mt.assignment_id = fcm.assignment_id
-JOIN faculty f ON fcm.faculty_id = f.faculty_id
-JOIN course c ON fcm.course_id = c.course_id
-JOIN student_batch sb ON mt.batch_id = sb.batch_id
-JOIN time_slot ts ON mt.slot_id = ts.slot_id
-LEFT JOIN room r ON mt.room_id = r.room_id;
-
-COMMENT ON VIEW v_master_timetable IS 'Human-readable timetable with all entity details joined';
-
--- View 2: Faculty Schedule
-CREATE VIEW v_faculty_schedule AS
-SELECT
-    f.short_name AS faculty,
-    f.name AS full_name,
-    ts.day_of_week,
-    ts.start_time,
-    ts.end_time,
-    c.course_code,
-    c.course_name,
-    sb.sub_batch,
-    sb.section,
-    r.room_number
+    mt.original_slot_group,
+    mt.semester
 FROM master_timetable mt
 JOIN faculty_course_map fcm ON mt.assignment_id = fcm.assignment_id
 JOIN faculty f ON fcm.faculty_id = f.faculty_id
@@ -389,9 +443,36 @@ JOIN course c ON fcm.course_id = c.course_id
 JOIN student_batch sb ON mt.batch_id = sb.batch_id
 JOIN time_slot ts ON mt.slot_id = ts.slot_id
 LEFT JOIN room r ON mt.room_id = r.room_id
+LEFT JOIN faculty_name_map fnm ON f.short_name = fnm.short_name;
+
+COMMENT ON VIEW v_master_timetable IS 'Human-readable timetable with all entity details joined, including faculty full names';
+
+-- View 2: Faculty Schedule
+CREATE VIEW v_faculty_schedule AS
+SELECT
+    f.short_name AS faculty,
+    COALESCE(fnm.full_name, f.name, f.short_name) AS full_name,
+    ts.day_of_week,
+    ts.start_time,
+    ts.end_time,
+    c.course_code,
+    c.course_name,
+    c.lecture_hrs,
+    sb.sub_batch,
+    sb.section,
+    r.room_number,
+    mt.semester
+FROM master_timetable mt
+JOIN faculty_course_map fcm ON mt.assignment_id = fcm.assignment_id
+JOIN faculty f ON fcm.faculty_id = f.faculty_id
+JOIN course c ON fcm.course_id = c.course_id
+JOIN student_batch sb ON mt.batch_id = sb.batch_id
+JOIN time_slot ts ON mt.slot_id = ts.slot_id
+LEFT JOIN room r ON mt.room_id = r.room_id
+LEFT JOIN faculty_name_map fnm ON f.short_name = fnm.short_name
 ORDER BY f.short_name, ts.day_of_week, ts.start_time;
 
-COMMENT ON VIEW v_faculty_schedule IS 'Per-faculty schedule view sorted by day and time';
+COMMENT ON VIEW v_faculty_schedule IS 'Per-faculty schedule view sorted by day and time, with full name resolution';
 
 -- View 3: Room Utilization
 CREATE VIEW v_room_utilization AS

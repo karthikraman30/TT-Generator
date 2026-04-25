@@ -10,7 +10,7 @@ Generated_Master_Timetable.*
 # Firebase Admin SDK (contains private keys — NEVER commit)
 *Firebase Admin SDK*.json
 serviceAccountKey*.json
-
+T-TGenerator Firebase Admin SDK.json
 # OS files
 .DS_Store
 

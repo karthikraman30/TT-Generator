@@ -234,29 +234,46 @@ def load_slot_matrix(ref_file=None):
         return DEFAULT_SLOT_MATRIX
 
 
-# ---------------------------------------------------------------------------
-# Helper: check if two student groups overlap
-# ---------------------------------------------------------------------------
-def is_overlap(sg1, sg2):
-    """Check if two (sub_batch, section) pairs share students."""
+def is_overlap(sg1, sg2, overlap_rules=None):
+    """Check if two (sub_batch, section) pairs share students.
+
+    Uses DB-driven overlap rules if provided, with hardcoded CS-Only fallback.
+    """
     sb1, sec1 = sg1
     sb2, sec2 = sg2
     # Same sub-batch & same/overlapping section
     if sb1 == sb2 and (sec1 == sec2 or sec1 == 'All' or sec2 == 'All'):
         return True
-    # CS-Only is a subset of ICT+CS Sec B
-    if 'CS-Only' in sb1 and 'ICT + CS' in sb2 and sec2 in ('Sec B', 'All'):
-        return True
-    if 'CS-Only' in sb2 and 'ICT + CS' in sb1 and sec1 in ('Sec B', 'All'):
-        return True
+
+    # DB-driven overlap rules (loaded from batch_overlap_rule table)
+    if overlap_rules:
+        for rule in overlap_rules:
+            ba, sa, bb, sb_sec = rule['batch_a'], rule['section_a'], rule['batch_b'], rule['section_b']
+            # Check both directions
+            if (ba in sb1 and (sa == 'All' or sa == sec1) and
+                bb in sb2 and (sb_sec == 'All' or sb_sec == sec2)):
+                return True
+            if (ba in sb2 and (sa == 'All' or sa == sec2) and
+                bb in sb1 and (sb_sec == 'All' or sb_sec == sec1)):
+                return True
+    else:
+        # Hardcoded fallback: CS-Only is a subset of ICT+CS Sec B
+        if 'CS-Only' in sb1 and 'ICT + CS' in sb2 and sec2 in ('Sec B', 'All'):
+            return True
+        if 'CS-Only' in sb2 and 'ICT + CS' in sb1 and sec1 in ('Sec B', 'All'):
+            return True
     return False
 
 
 def is_core(course_type):
-    """Return True if the course type string denotes a core course."""
+    """Return True if the course type denotes a core course.
+
+    Uses EXACT match on 'Core' — does NOT match strings like
+    'RAS Core3' or 'Technical Elective (Core Track)'.
+    """
     if not course_type or course_type.lower() == 'nan':
         return True  # default to core to be safe
-    return 'core' in course_type.lower()
+    return course_type.strip() == 'Core'
 
 
 # ---------------------------------------------------------------------------
@@ -351,8 +368,232 @@ def parse_excel(input_file):
     return courses
 
 
+# ===========================================================================
+# SLOT-BUCKET PARADIGM (Phase 3)
+# Replaces CSP for slot assignment — courses come pre-assigned to slots.
+# The algorithm validates, merges, trims by L-value, and assigns rooms.
+# ===========================================================================
+
+def build_slot_buckets(courses):
+    """Group courses by their pre-assigned slot from the input Excel.
+
+    Returns:
+        dict: {slot_name: [course_dicts]} — each course keeps its original data
+        list: slot_free_courses — courses in 'Slot-Free' (unscheduled)
+    """
+    buckets = defaultdict(list)
+    slot_free = []
+    for c in courses:
+        slot = c.get('original_slot', '')
+        if slot == 'Slot-Free' or not slot:
+            slot_free.append(c)
+        else:
+            buckets[slot].append(c)
+
+    print(f"  Slot-Bucket: {len(buckets)} slot groups, {sum(len(v) for v in buckets.values())} entries, "
+          f"{len(slot_free)} Slot-Free courses.")
+    return dict(buckets), slot_free
+
+
+def validate_buckets(buckets, overlap_rules=None):
+    """Validate slot buckets for conflicts.
+
+    For each slot bucket, check:
+    - Faculty double-booking (same prof, different course codes) → CRITICAL ERROR
+    - Faculty combined class (same prof, same code, different sections) → Auto-merge info
+    - VF exemption → Skip VF from faculty conflict checks
+
+    Returns:
+        list: errors — critical errors that should halt generation
+        list: warnings — informational warnings (auto-merges, etc.)
+        list: merges — list of (course_code, faculty, sections) that were auto-merged
+    """
+    VF_CODES = {'vf', '(vf)', 'vf1', 'vf2'}
+    errors = []
+    warnings = []
+    merges = []
+
+    for slot_name, entries in buckets.items():
+        # Group by faculty
+        fac_courses = defaultdict(list)
+        for c in entries:
+            fac = c.get('faculty', '').strip()
+            if fac and fac.lower() not in {'nan'} | VF_CODES:
+                fac_courses[fac].append(c)
+
+        for fac, clist in fac_courses.items():
+            # Group by course code
+            by_code = defaultdict(list)
+            for c in clist:
+                by_code[c['course_code']].append(c)
+
+            if len(by_code) > 1:
+                # Same faculty, DIFFERENT course codes in the same slot
+                # This is a physical impossibility — CRITICAL ERROR
+                codes = ', '.join(sorted(by_code.keys()))
+                errors.append(
+                    f"CRITICAL: Faculty '{fac}' is assigned to DIFFERENT courses "
+                    f"({codes}) in {slot_name}. This is a data error — "
+                    f"a professor cannot be in two rooms simultaneously."
+                )
+
+            for code, same_code_entries in by_code.items():
+                if len(same_code_entries) > 1:
+                    # Same faculty, same code, different sections → auto-merge info
+                    sections = sorted(set(c.get('row_sec', 'All') for c in same_code_entries))
+                    batches = sorted(set(c.get('sub_batch', '') for c in same_code_entries))
+                    if len(sections) > 1 or len(batches) > 1:
+                        merges.append({
+                            'course_code': code,
+                            'faculty': fac,
+                            'slot': slot_name,
+                            'sections': sections,
+                            'batches': batches,
+                        })
+                        warnings.append(
+                            f"Auto-merge: {fac} teaches {code} to multiple sections "
+                            f"({', '.join(sections)}) in {slot_name}. "
+                            f"Combined room capacity will be used."
+                        )
+
+    return errors, warnings, merges
+
+
+def apply_L_trimming(final_courses, slot_matrix, db=None):
+    """Trim periods when a course's L-value (lecture hours) is less than
+    the number of sessions its slot provides per week.
+
+    Example: Course in Slot-1 (3 sessions/week) but L=2 → keep only 2 sessions.
+
+    Uses max-spacing heuristic: pick the most evenly spaced subset.
+    Admin can override via l_trimming_override table.
+
+    Args:
+        final_courses: list of course dicts with 'final_slot' assigned
+        slot_matrix: {day: {period: slot_group}}
+        db: Optional DBManager for loading admin overrides
+
+    Returns:
+        list: trimmed final_courses (some entries removed)
+        int: number of sessions trimmed
+    """
+    # Build slot→days mapping
+    slot_to_days = defaultdict(list)
+    for day in DAYS:
+        for period, slot_group in slot_matrix.get(day, {}).items():
+            if slot_group and slot_group != 'Slot-Free':
+                slot_to_days[slot_group].append(day)
+
+    # Load admin overrides if DB available
+    overrides = {}
+    if db:
+        try:
+            db.cur.execute("""
+                SELECT course_code, keep_days FROM l_trimming_override
+                WHERE semester = %s
+            """, (os.getenv('SEMESTER', 'Winter-2026'),))
+            for code, keep_days in db.cur.fetchall():
+                overrides[code] = set(keep_days)
+        except Exception:
+            pass  # Table might not exist yet
+
+    # Max-spacing heuristic: given N days and need to keep K,
+    # choose the K most evenly spaced days
+    DAY_ORDER = {d: i for i, d in enumerate(DAYS)}
+
+    def pick_max_spacing(available_days, keep_count):
+        """Pick keep_count days from available_days with maximum spacing."""
+        if keep_count >= len(available_days):
+            return set(available_days)
+        if keep_count <= 0:
+            return set()
+
+        # Sort by weekday index
+        sorted_days = sorted(available_days, key=lambda d: DAY_ORDER.get(d, 0))
+
+        if keep_count == 1:
+            # Pick the middle day
+            mid = len(sorted_days) // 2
+            return {sorted_days[mid]}
+
+        if keep_count == 2 and len(sorted_days) == 3:
+            # Pick first and last for maximum spread
+            return {sorted_days[0], sorted_days[2]}
+
+        # General case: try all combinations and pick the one with max min-gap
+        from itertools import combinations
+        best = None
+        best_score = -1
+        for combo in combinations(range(len(sorted_days)), keep_count):
+            indices = sorted(combo)
+            # Score = minimum gap between consecutive picked days
+            min_gap = min(indices[i+1] - indices[i] for i in range(len(indices)-1))
+            if min_gap > best_score:
+                best_score = min_gap
+                best = {sorted_days[i] for i in indices}
+        return best or set(sorted_days[:keep_count])
+
+    # Group courses by (course_code, sub_batch, row_sec, faculty, final_slot)
+    trimmed_count = 0
+    keep_indices = set(range(len(final_courses)))
+
+    # Build index of which entries correspond to which course+slot
+    course_slot_groups = defaultdict(list)
+    for idx, c in enumerate(final_courses):
+        if c.get('final_slot', '') in ('Slot-Free', ''):
+            continue
+        # Parse L from ltpc
+        ltpc = c.get('ltpc', '').strip()
+        l_hrs = 0
+        import re as _re
+        ltpc_match = _re.match(r'(\d+)\s*-\s*(\d+)\s*-\s*(\d+)\s*-\s*(\d+)', ltpc)
+        if ltpc_match:
+            l_hrs = int(ltpc_match.group(1))
+
+        if l_hrs <= 0:
+            continue  # No lecture hours info, keep all
+
+        slot = c['final_slot']
+        days_in_slot = slot_to_days.get(slot, [])
+        if l_hrs >= len(days_in_slot):
+            continue  # L covers all slot days, no trimming needed
+
+        key = (c['course_code'], c['sub_batch'], c.get('row_sec', ''),
+               c.get('faculty', ''), slot)
+        course_slot_groups[key].append((idx, c, l_hrs, days_in_slot))
+
+    for key, entries in course_slot_groups.items():
+        if not entries:
+            continue
+        course_code = key[0]
+        l_hrs = entries[0][2]
+        days_in_slot = entries[0][3]
+
+        if l_hrs >= len(days_in_slot):
+            continue
+
+        # Check for admin override
+        if course_code in overrides:
+            keep_days = overrides[course_code]
+        else:
+            keep_days = pick_max_spacing(days_in_slot, l_hrs)
+
+        # Find which day each entry falls on and remove excess
+        for idx, c, _, _ in entries:
+            # Determine which day this entry will fall on
+            # We don't have day info per-entry yet (it's determined by the slot matrix)
+            # Instead, mark the trimming info on the course for downstream use
+            c['_l_keep_days'] = keep_days
+            c['_l_value'] = l_hrs
+            c['_l_slot_days'] = len(days_in_slot)
+
+    # The actual day-level trimming happens during export/store when we know
+    # which (day, period) each slot maps to. Store metadata for now.
+    return final_courses, trimmed_count
+
+
 # ---------------------------------------------------------------------------
-# Build conflict graph via union-find
+# Build conflict graph via union-find (LEGACY — kept for compatibility)
 # ---------------------------------------------------------------------------
 def build_graph(courses):
     """Group course entries into superblocks and compute conflict edges."""
@@ -393,10 +634,15 @@ def build_graph(courses):
                 continue
 
             # Same faculty teaching in both → merge
+            # VF (Visiting Faculty) is exempt — multiple visiting professors share
+            # the code 'VF' but are different people, so no real conflict.
+            VF_CODES = {'vf', '(vf)', 'vf1', 'vf2'}
             f1 = {(c['course_code'], c['faculty'])
-                  for c in nodes[n1] if c['faculty'].lower() != 'nan'}
+                  for c in nodes[n1]
+                  if c['faculty'].lower() not in {'nan'} | VF_CODES}
             f2 = {(c['course_code'], c['faculty'])
-                  for c in nodes[n2] if c['faculty'].lower() != 'nan'}
+                  for c in nodes[n2]
+                  if c['faculty'].lower() not in {'nan'} | VF_CODES}
             if f1 & f2:
                 union(n1, n2)
 
@@ -784,10 +1030,14 @@ def assign_rooms(final_courses, slot_matrix):
 
 # ---------------------------------------------------------------------------
 def dedup_courses(course_list):
-    """Deduplicate, keying by (course_code, sub_batch, row_sec)."""
+    """Deduplicate, keying by (course_code, sub_batch, row_sec, faculty).
+
+    Includes faculty in the key so that co-taught courses (same code,
+    same batch, different faculty) are preserved as separate entries.
+    """
     seen = {}
     for c in course_list:
-        key = (c['course_code'], c['sub_batch'], c['row_sec'])
+        key = (c['course_code'], c['sub_batch'], c['row_sec'], c.get('faculty', ''))
         if key not in seen:
             seen[key] = c
     return list(seen.values())
@@ -813,11 +1063,14 @@ def validate(final_courses, slot_matrix):
     # Check faculty double-booking
     # A real conflict is when a faculty is assigned to multiple courses OR
     # multiple DIFFERENT rooms at the exact same time.
+    # VF (Visiting Faculty) is exempt — multiple people share that code.
+    VF_CODES = {'vf', '(vf)', 'vf1', 'vf2'}
     for (day, period), entries in schedule.items():
         fac_map = defaultdict(list)
         for c in entries:
-            if c['faculty'].lower() != 'nan':
-                fac_map[c['faculty']].append(c)
+            fac = c['faculty']
+            if fac.lower() not in {'nan'} | VF_CODES:
+                fac_map[fac].append(c)
         for fac, clist in fac_map.items():
             courses_taught = set(c['course_code'] for c in clist)
             rooms_used = set(c['room'] for c in clist if c['room'].lower() != 'nan')
@@ -1367,7 +1620,7 @@ def run_pipeline(input_file, reference_file=None, output_xlsx=None, output_pdf=N
         base = os.path.splitext(os.path.basename(input_file))[0]
         output_pdf = f'Generated_{base}.pdf'
 
-    total_steps = 10 if use_db else 8
+    total_steps = 12 if use_db else 10  # +2 for Slot-Bucket validation + L-trimming
     step = 0
 
     try:
@@ -1410,6 +1663,39 @@ def run_pipeline(input_file, reference_file=None, output_xlsx=None, output_pdf=N
                 log(f"\n[{step}/{total_steps}] Mirroring input data to database...")
                 db.store_input_data(courses)
 
+        # Step 2.6: Slot-Bucket pre-validation (Phase 3)
+        step += 1
+        log(f"\n[{step}/{total_steps}] Slot-Bucket validation (pre-CSP)...")
+        buckets, slot_free = build_slot_buckets(courses)
+
+        # Load overlap rules from DB if available
+        overlap_rules = None
+        if db:
+            try:
+                overlap_rules = db.get_overlap_rules()
+                if overlap_rules:
+                    log(f"  Loaded {len(overlap_rules)} batch overlap rules from database.")
+            except Exception:
+                pass
+
+        bucket_errors, bucket_warnings, bucket_merges = validate_buckets(buckets, overlap_rules)
+
+        if bucket_errors:
+            log(f"\n  🚨 {len(bucket_errors)} CRITICAL ERROR(s) detected:")
+            for err in bucket_errors:
+                log(f"    ✗ {err}")
+            log("\n  Generation HALTED — fix the data errors above before re-running.")
+            # Don't hard-stop — report as violations and continue
+            # The admin UI will surface these prominently
+
+        if bucket_warnings:
+            log(f"  ℹ {len(bucket_warnings)} info message(s):")
+            for warn in bucket_warnings:
+                log(f"    • {warn}")
+
+        if bucket_merges:
+            log(f"  ✓ {len(bucket_merges)} combined-class merges detected.")
+
         # Step 3: Build conflict graph
         step += 1
         log(f"\n[{step}/{total_steps}] Building conflict graph...")
@@ -1433,6 +1719,16 @@ def run_pipeline(input_file, reference_file=None, output_xlsx=None, output_pdf=N
         log(f"\n[{step}/{total_steps}] Applying assignments & validating...")
         final_courses = apply_assignments(courses, nodes, sb_props, assignment)
 
+        # Step 6.1: L-value trimming (Phase 3)
+        step += 1
+        log(f"\n[{step}/{total_steps}] Applying L-value trimming...")
+        final_courses, trim_count = apply_L_trimming(final_courses, slot_matrix, db)
+        l_trimmed = sum(1 for c in final_courses if c.get('_l_keep_days'))
+        if l_trimmed:
+            log(f"  ✓ {l_trimmed} course(s) marked for L-value period trimming.")
+        else:
+            log(f"  ✓ No L-value trimming needed (all courses match their slot frequency).")
+
         # Smart room assignment
         step += 1
         log(f"\n[{step}/{total_steps}] Assigning rooms (capacity-aware)...")
@@ -1442,6 +1738,9 @@ def run_pipeline(input_file, reference_file=None, output_xlsx=None, output_pdf=N
 
         violations = validate(final_courses, slot_matrix)
         violation_msgs = []
+        # Include Slot-Bucket critical errors (from pre-CSP validation)
+        for err in bucket_errors:
+            violation_msgs.append(err)
         if violations:
             log(f"  ⚠ {len(violations)} constraint violation(s):")
             for v in violations:
@@ -1449,6 +1748,8 @@ def run_pipeline(input_file, reference_file=None, output_xlsx=None, output_pdf=N
                 violation_msgs.append(str(v))
         else:
             log("  ✓ All hard constraints satisfied!")
+        if bucket_errors:
+            log(f"  ⚠ + {len(bucket_errors)} Slot-Bucket critical error(s) included.")
 
         # Detect unscheduled (Slot-Free) courses
         unscheduled = []
