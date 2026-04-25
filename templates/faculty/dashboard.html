@@ -15,9 +15,13 @@
     <div class="card-header">
         <span class="card-title">Quick Links</span>
     </div>
-    <div class="card-body" style="display:flex;gap:1rem;flex-wrap:wrap;">
+    <div class="card-body" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
         <a href="{{ url_for('faculty.my_timetable') }}" class="btn btn-primary">🗓️ My Timetable</a>
         <a href="{{ url_for('faculty.master_timetable') }}" class="btn btn-secondary">📋 Master Timetable</a>
+        <a href="{{ url_for('faculty.download_ics') }}" class="btn" style="background:linear-gradient(135deg,#10b981,#06b6d4);color:#fff;">📅 Add to Google Calendar / iCal</a>
+        <span style="font-size:0.75rem;color:var(--text-secondary);">
+            ICS works with Google Calendar, Apple Calendar & Outlook
+        </span>
     </div>
 </div>
 {% endblock %}

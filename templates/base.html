@@ -68,6 +68,9 @@
                 <a href="{{ url_for('admin.violations') }}" class="nav-link {% if request.endpoint == 'admin.violations' %}active{% endif %}">
                     <span class="nav-icon">⚠️</span> Violations
                 </a>
+                <a href="{{ url_for('admin.configuration') }}" class="nav-link {% if request.endpoint == 'admin.configuration' %}active{% endif %}">
+                    <span class="nav-icon">⚙️</span> Configuration
+                </a>
             </div>
             {% else %}
             <div class="nav-section">

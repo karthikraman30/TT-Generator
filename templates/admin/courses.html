@@ -9,9 +9,13 @@
         <span style="font-size:1.3rem;">💡</span>
         <span style="color:var(--text-secondary);font-size:0.88rem;">
             Set section strengths via <a href="{{ url_for('admin.upload') }}" style="color:var(--accent-hover);font-weight:600;">Upload Data → Section Strengths</a> Excel file. You can also override individual courses below.
+            Use the <strong>Slot</strong> column to reassign a course to a different slot.
         </span>
     </div>
 </div>
+
+<!-- Status message for slot changes -->
+<div id="slot-msg" style="display:none;padding:0.75rem 1rem;border-radius:8px;font-size:0.85rem;margin-bottom:1rem;"></div>
 
 <!-- Courses Table -->
 <div class="card">
@@ -29,6 +33,7 @@
                     <th>Batches</th>
                     <th>L-T-P-C</th>
                     <th>Type</th>
+                    <th>Slot</th>
                     <th>Req. Seats</th>
                 </tr>
             </thead>
@@ -60,6 +65,23 @@
                     </span>
                 </td>
                 <td>
+                    {% set slot_courses = c.slot_courses %}
+                    {% if slot_courses %}
+                        {% for sc in slot_courses %}
+                            <span class="badge" style="background:rgba(99,102,241,0.15);color:#6366f1;font-weight:600;cursor:pointer;"
+                                  title="Click to change slot"
+                                  onclick="showSlotChanger({{ sc.id }}, '{{ sc.slot.slot_label }}', '{{ c.code }}')">
+                                {{ sc.slot.slot_label }}
+                                {% if sc.slot.slot_label != 'Slot-Free' %}
+                                <span style="font-size:0.65rem;opacity:0.6;">✏️</span>
+                                {% endif %}
+                            </span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="badge" style="background:rgba(160,174,192,0.15);color:#a0aec0;">—</span>
+                    {% endif %}
+                </td>
+                <td>
                     <form action="{{ url_for('admin.update_course_capacity', course_id=c.id) }}" method="POST" style="display:flex;gap:0.4rem;align-items:center;">
                         <input type="number" name="capacity_override" min="1"
                                value="{{ c.capacity_override if c.capacity_override else '' }}"
@@ -70,7 +92,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty-state">
+            <tr><td colspan="8" class="empty-state">
                 <div class="empty-icon">📚</div>
                 <div class="empty-text">No courses loaded yet</div>
                 <div class="empty-hint">Upload a Slots file to import courses automatically</div>
@@ -80,4 +102,95 @@
         </table>
     </div>
 </div>
+
+<!-- Slot Change Modal -->
+<div id="slot-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--card-bg, #fff);border-radius:12px;padding:1.5rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 0.5rem 0;font-size:1rem;">🔄 Change Slot Assignment</h3>
+        <p id="slot-modal-info" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem;"></p>
+        <select id="slot-modal-select" style="width:100%;padding:0.5rem;font-size:0.9rem;border-radius:8px;border:1px solid var(--border-color, #ddd);margin-bottom:1rem;">
+            <option value="">Select new slot...</option>
+        </select>
+        <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+            <button class="btn btn-sm" onclick="closeSlotModal()" style="background:rgba(160,174,192,0.2);color:var(--text-secondary);">Cancel</button>
+            <button class="btn btn-sm btn-primary" onclick="confirmSlotChange()">Move Course</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var currentSlotCourseId = null;
+
+function showSlotChanger(scId, currentSlot, courseCode) {
+    currentSlotCourseId = scId;
+    document.getElementById('slot-modal-info').textContent =
+        'Moving ' + courseCode + ' from ' + currentSlot + ' to:';
+
+    // Populate slot options (fetch from page data)
+    var select = document.getElementById('slot-modal-select');
+    select.innerHTML = '<option value="">Select new slot...</option>';
+
+    // Use inline data from available slots
+    {% if active_semester %}
+    var slots = [
+        {% for s in active_semester.slots.all() %}
+        { id: {{ s.id }}, label: '{{ s.slot_label }}' },
+        {% endfor %}
+    ];
+    slots.forEach(function(s) {
+        if (s.label !== currentSlot) {
+            var opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.label;
+            select.appendChild(opt);
+        }
+    });
+    {% endif %}
+
+    document.getElementById('slot-modal').style.display = 'flex';
+}
+
+function closeSlotModal() {
+    document.getElementById('slot-modal').style.display = 'none';
+    currentSlotCourseId = null;
+}
+
+function confirmSlotChange() {
+    var newSlotId = document.getElementById('slot-modal-select').value;
+    if (!newSlotId) { alert('Please select a slot.'); return; }
+
+    fetch('{{ url_for("admin.api_change_course_slot") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ slot_course_id: currentSlotCourseId, new_slot_id: parseInt(newSlotId) })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        closeSlotModal();
+        var el = document.getElementById('slot-msg');
+        if (d.success) {
+            var msg = '✅ ' + d.message;
+            if (d.warnings && d.warnings.length > 0) {
+                msg += ' ' + d.warnings.join(' ');
+                el.style.background = 'rgba(245,158,11,0.1)';
+                el.style.border = '1px solid rgba(245,158,11,0.3)';
+                el.style.color = '#f59e0b';
+            } else {
+                el.style.background = 'rgba(16,185,129,0.1)';
+                el.style.border = '1px solid rgba(16,185,129,0.3)';
+                el.style.color = '#10b981';
+            }
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(function() { location.reload(); }, 1500);
+        } else {
+            el.textContent = '❌ ' + d.message;
+            el.style.background = 'rgba(239,68,68,0.1)';
+            el.style.border = '1px solid rgba(239,68,68,0.3)';
+            el.style.color = '#ef4444';
+            el.style.display = 'block';
+        }
+    });
+}
+</script>
 {% endblock %}

@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Configuration — Timetable Generator{% endblock %}
+{% block page_title %}Configuration{% endblock %}
+
+{% block content %}
+<div class="card" style="border-left:3px solid var(--info);">
+    <div class="card-body" style="display:flex;align-items:center;gap:1rem;padding:0.85rem 1.25rem;">
+        <span style="font-size:1.3rem;">⚙️</span>
+        <span style="color:var(--text-secondary);font-size:0.88rem;">
+            Manage batch overlaps, L-value trimming overrides, and faculty name mappings.
+        </span>
+    </div>
+</div>
+
+<!-- Status message -->
+<div id="cfg-msg" style="display:none;padding:0.75rem 1rem;border-radius:8px;font-size:0.85rem;margin-bottom:1rem;"></div>
+
+<!-- Tab buttons -->
+<div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <button class="btn btn-sm tab-btn active" onclick="switchTab('overlaps', this)">🔗 Batch Overlaps ({{ overlaps|length }})</button>
+    <button class="btn btn-sm tab-btn" onclick="switchTab('ltrim', this)">✂️ L-Trimming ({{ l_overrides|length }})</button>
+    <button class="btn btn-sm tab-btn" onclick="switchTab('facnames', this)">👤 Faculty Names ({{ fac_names|length }})</button>
+</div>
+
+<!-- OVERLAPS TAB -->
+<div id="tab-overlaps" class="tab-content card">
+    <div class="card-header">
+        <span class="card-title">🔗 Batch Overlap Rules</span>
+        <span class="badge badge-info">Defines which student groups share students</span>
+    </div>
+    <div class="card-body" style="padding:1rem;">
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem;">
+            When batch A's students also attend batch B's classes, add a rule here.
+            This prevents the scheduler from double-booking them.
+        </p>
+        <form onsubmit="addOverlap(event)" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+            <div><label style="font-size:0.75rem;">Batch A</label><br>
+                <input type="text" id="ov-ba" placeholder="e.g. CS-Only" required style="width:140px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <div><label style="font-size:0.75rem;">Section A</label><br>
+                <input type="text" id="ov-sa" value="All" style="width:80px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <div><label style="font-size:0.75rem;">Batch B</label><br>
+                <input type="text" id="ov-bb" placeholder="e.g. ICT + CS" required style="width:140px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <div><label style="font-size:0.75rem;">Section B</label><br>
+                <input type="text" id="ov-sb" value="Sec B" style="width:80px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <div><label style="font-size:0.75rem;">Description</label><br>
+                <input type="text" id="ov-desc" placeholder="CS-Only ⊂ ICT Sec B" style="width:180px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <button type="submit" class="btn btn-sm btn-primary">+ Add Rule</button>
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Batch A</th><th>Section A</th><th>Batch B</th><th>Section B</th><th>Description</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for r in overlaps %}
+            <tr>
+                <td><strong>{{ r.batch_a }}</strong></td>
+                <td>{{ r.section_a }}</td>
+                <td><strong>{{ r.batch_b }}</strong></td>
+                <td>{{ r.section_b }}</td>
+                <td style="color:var(--text-secondary);font-size:0.82rem;">{{ r.description or '—' }}</td>
+                <td><button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:#ef4444;" onclick="deleteOverlap({{ r.id }})">Delete</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty-state"><div class="empty-text">No overlap rules defined</div></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- L-TRIMMING TAB -->
+<div id="tab-ltrim" class="tab-content card" style="display:none;">
+    <div class="card-header">
+        <span class="card-title">✂️ L-Value Trimming Overrides</span>
+        <span class="badge badge-info">Specify which days to keep when L < slot sessions</span>
+    </div>
+    <div class="card-body" style="padding:1rem;">
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem;">
+            When a course has fewer lecture hours (L) than its slot provides, the algorithm
+            automatically picks the most spaced-out days. Use overrides to manually choose which days to keep.
+        </p>
+        <form onsubmit="addLTrim(event)" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+            <div><label style="font-size:0.75rem;">Course Code</label><br>
+                <input type="text" id="lt-code" placeholder="e.g. IT301" required style="width:120px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <div><label style="font-size:0.75rem;">Keep Days (comma-separated)</label><br>
+                <input type="text" id="lt-days" placeholder="Monday, Friday" required style="width:200px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <button type="submit" class="btn btn-sm btn-primary">+ Add Override</button>
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Course Code</th><th>Keep Days</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for ov in l_overrides %}
+            <tr>
+                <td><strong>{{ ov.course_code }}</strong></td>
+                <td>{{ ov.keep_days }}</td>
+                <td><button class="btn btn-sm" style="background:rgba(239,68,68,0.15);color:#ef4444;" onclick="deleteLTrim({{ ov.id }})">Delete</button></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="empty-state"><div class="empty-text">No L-trimming overrides. Algorithm will use max-spacing heuristic.</div></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- FACULTY NAMES TAB -->
+<div id="tab-facnames" class="tab-content card" style="display:none;">
+    <div class="card-header">
+        <span class="card-title">👤 Faculty Name Mappings</span>
+        <span class="badge badge-info">Maps short codes to full names (used in PDFs & ICS)</span>
+    </div>
+    <div class="card-body" style="padding:1rem;">
+        <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem;">
+            Faculty short names (e.g. PMJ, HSJ) are mapped to full academic names for PDF timetables and calendar exports.
+        </p>
+        <form onsubmit="addFacName(event)" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem;">
+            <div><label style="font-size:0.75rem;">Short Name</label><br>
+                <input type="text" id="fn-short" placeholder="e.g. PMJ" required style="width:100px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <div><label style="font-size:0.75rem;">Full Name</label><br>
+                <input type="text" id="fn-full" placeholder="e.g. Pokhar M Jat" required style="width:220px;padding:0.3rem 0.5rem;font-size:0.85rem;"></div>
+            <button type="submit" class="btn btn-sm btn-primary">+ Add / Update</button>
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Short Name</th><th>Full Name</th><th>Source</th></tr></thead>
+            <tbody>
+            {% for fn in fac_names %}
+            <tr>
+                <td><strong>{{ fn.abbreviation }}</strong></td>
+                <td>{{ fn.full_name }}</td>
+                <td><span style="font-size:0.75rem;opacity:0.6;">{{ fn.source }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="empty-state"><div class="empty-text">No faculty name mappings yet</div></td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function switchTab(name, btn) {
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.style.display = 'none'; });
+    document.getElementById('tab-' + name).style.display = 'block';
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+}
+
+function showMsg(text, isError) {
+    var el = document.getElementById('cfg-msg');
+    el.textContent = text;
+    el.style.display = 'block';
+    if (isError) {
+        el.style.background = 'rgba(239,68,68,0.1)';
+        el.style.color = '#ef4444';
+        el.style.border = '1px solid rgba(239,68,68,0.3)';
+    } else {
+        el.style.background = 'rgba(16,185,129,0.1)';
+        el.style.color = '#10b981';
+        el.style.border = '1px solid rgba(16,185,129,0.3)';
+    }
+}
+
+function cfgPost(url, data) {
+    return fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); });
+}
+
+// Overlaps
+function addOverlap(e) {
+    e.preventDefault();
+    cfgPost('{{ url_for("admin.api_config_overlap") }}', {
+        batch_a: document.getElementById('ov-ba').value,
+        section_a: document.getElementById('ov-sa').value,
+        batch_b: document.getElementById('ov-bb').value,
+        section_b: document.getElementById('ov-sb').value,
+        description: document.getElementById('ov-desc').value
+    }).then(function(d) { if (d.success) location.reload(); else showMsg(d.error, true); });
+}
+
+function deleteOverlap(oid) {
+    if (!confirm('Delete this overlap rule?')) return;
+    cfgPost('{{ url_for("admin.api_config_overlap_delete") }}', { rule_id: oid })
+        .then(function(d) { if (d.success) location.reload(); else showMsg(d.error, true); });
+}
+
+// L-Trimming
+function addLTrim(e) {
+    e.preventDefault();
+    var daysRaw = document.getElementById('lt-days').value;
+    var days = daysRaw.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+    cfgPost('{{ url_for("admin.api_config_ltrim") }}', {
+        course_code: document.getElementById('lt-code').value,
+        keep_days: days
+    }).then(function(d) { if (d.success) location.reload(); else showMsg(d.error, true); });
+}
+
+function deleteLTrim(oid) {
+    if (!confirm('Delete this L-trimming override?')) return;
+    cfgPost('{{ url_for("admin.api_config_ltrim_delete") }}', { override_id: oid })
+        .then(function(d) { if (d.success) location.reload(); else showMsg(d.error, true); });
+}
+
+// Faculty Names
+function addFacName(e) {
+    e.preventDefault();
+    cfgPost('{{ url_for("admin.api_config_faculty_name") }}', {
+        abbreviation: document.getElementById('fn-short').value,
+        full_name: document.getElementById('fn-full').value
+    }).then(function(d) { if (d.success) location.reload(); else showMsg(d.error, true); });
+}
+</script>
+{% endblock %}

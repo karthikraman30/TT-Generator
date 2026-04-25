@@ -1,9 +1,9 @@
 """
 Faculty routes.
-Read-only views: personal timetable and master timetable.
+Read-only views: personal timetable, master timetable, and ICS download.
 """
 
-from flask import Blueprint, render_template, session
+from flask import Blueprint, render_template, session, make_response, flash, redirect, url_for
 from models import Semester, TimetableEntry, TimeSlot, Batch, Faculty
 from routes.auth import login_required
 
@@ -72,3 +72,34 @@ def master_timetable():
                            batches=batches,
                            active_semester=active,
                            view_type='master')
+
+
+@faculty_bp.route('/download-ics')
+@login_required
+def download_ics():
+    """Faculty downloads their own timetable as an ICS calendar file."""
+    from services.ics_generator import generate_faculty_ics
+
+    user = session.get('user', {})
+    faculty_id = user.get('id')
+
+    if not faculty_id:
+        flash('No faculty profile linked.', 'error')
+        return redirect(url_for('faculty.dashboard'))
+
+    faculty = Faculty.query.get(faculty_id)
+    if not faculty:
+        flash('Faculty not found.', 'error')
+        return redirect(url_for('faculty.dashboard'))
+
+    try:
+        ics_bytes = generate_faculty_ics(faculty_id)
+    except Exception as e:
+        flash(f'ICS generation failed: {str(e)}', 'error')
+        return redirect(url_for('faculty.dashboard'))
+
+    response = make_response(ics_bytes)
+    response.headers['Content-Type'] = 'text/calendar; charset=utf-8'
+    response.headers['Content-Disposition'] = \
+        f'attachment; filename=Timetable_{faculty.abbreviation}.ics'
+    return response

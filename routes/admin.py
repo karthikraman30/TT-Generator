@@ -4,9 +4,10 @@ Full CRUD for all entities, file uploads, schedule generation, and violation log
 """
 
 import os
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, make_response
 from models import db, Program, Semester, Batch, Faculty, Room, Course, Slot, SlotCourse, \
-    CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, TimeSlot
+    CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, TimeSlot, \
+    FacultyNameMap, BatchOverlapRule, LTrimmingOverride
 from routes.auth import admin_required
 
 admin_bp = Blueprint('admin', __name__)
@@ -490,4 +491,180 @@ def swap_slots():
         flash(f'Swap failed: {str(e)}', 'error')
 
     return redirect(url_for('admin.slot_grid'))
+
+
+# ─── CONFIGURATION PAGE ─────────────────────────────────────
+@admin_bp.route('/configuration')
+@admin_required
+def configuration():
+    """Admin configuration: rooms, overlaps, L-trimming, faculty names."""
+    active = Semester.query.filter_by(is_active=True).first()
+    rooms = Room.query.order_by(Room.capacity.desc()).all()
+    overlaps = BatchOverlapRule.query.order_by(BatchOverlapRule.id).all()
+    l_overrides = []
+    fac_names = []
+
+    if active:
+        l_overrides = LTrimmingOverride.query.filter_by(semester_id=active.id).all()
+    fac_names = db.session.query(FacultyNameMap).order_by(FacultyNameMap.abbreviation).all()
+
+    return render_template('admin/configuration.html',
+                           rooms=rooms, overlaps=overlaps,
+                           l_overrides=l_overrides, fac_names=fac_names,
+                           active_semester=active)
+
+
+# ─── L-TRIMMING CRUD ────────────────────────────────────────
+@admin_bp.route('/api/config/ltrim', methods=['POST'])
+@admin_required
+def api_config_ltrim():
+    """Add or update an L-trimming override."""
+    data = request.get_json()
+    code = data.get('course_code', '').strip()
+    keep_days_raw = data.get('keep_days', [])
+    if isinstance(keep_days_raw, str):
+        keep_days_raw = [d.strip() for d in keep_days_raw.split(',') if d.strip()]
+
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        return jsonify({'success': False, 'error': 'No active semester'}), 400
+
+    valid_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'}
+    for d in keep_days_raw:
+        if d not in valid_days:
+            return jsonify({'success': False, 'error': f'Invalid day: {d}'}), 400
+
+    if not code or not keep_days_raw:
+        return jsonify({'success': False, 'error': 'Course code and at least one day required'}), 400
+
+    # Upsert
+    existing = LTrimmingOverride.query.filter_by(course_code=code, semester_id=active.id).first()
+    if existing:
+        existing.keep_days = ','.join(keep_days_raw)
+    else:
+        ov = LTrimmingOverride(course_code=code, semester_id=active.id, keep_days=','.join(keep_days_raw))
+        db.session.add(ov)
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@admin_bp.route('/api/config/ltrim/delete', methods=['POST'])
+@admin_required
+def api_config_ltrim_delete():
+    """Delete an L-trimming override."""
+    data = request.get_json()
+    ov = LTrimmingOverride.query.get(data.get('override_id'))
+    if ov:
+        db.session.delete(ov)
+        db.session.commit()
+    return jsonify({'success': True})
+
+
+# ─── FACULTY NAME MAP CRUD ──────────────────────────────────
+@admin_bp.route('/api/config/faculty-name', methods=['POST'])
+@admin_required
+def api_config_faculty_name():
+    """Add or update a faculty name mapping."""
+    data = request.get_json()
+    abbreviation = data.get('abbreviation', '').strip().upper()
+    full_name = data.get('full_name', '').strip()
+
+    if not abbreviation or not full_name:
+        return jsonify({'success': False, 'error': 'Abbreviation and full name required'}), 400
+
+    # Ensure the faculty exists
+    fac = Faculty.query.filter_by(abbreviation=abbreviation).first()
+    if not fac:
+        return jsonify({'success': False,
+                        'error': f'Faculty "{abbreviation}" not found. Upload timetable data first.'}), 400
+
+    # Upsert into FacultyNameMap
+    existing = FacultyNameMap.query.filter_by(abbreviation=abbreviation).first()
+    if existing:
+        existing.full_name = full_name
+        existing.source = 'Admin UI'
+    else:
+        fnm = FacultyNameMap(abbreviation=abbreviation, full_name=full_name, source='Admin UI')
+        db.session.add(fnm)
+
+    # Also update Faculty.full_name
+    fac.full_name = full_name
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+# ─── BATCH OVERLAP RULE CRUD ────────────────────────────────
+@admin_bp.route('/api/config/overlap', methods=['POST'])
+@admin_required
+def api_config_overlap():
+    """Add a batch overlap rule."""
+    data = request.get_json()
+    rule = BatchOverlapRule(
+        batch_a=data.get('batch_a', '').strip(),
+        section_a=data.get('section_a', 'All').strip(),
+        batch_b=data.get('batch_b', '').strip(),
+        section_b=data.get('section_b', 'All').strip(),
+        description=data.get('description', '').strip(),
+    )
+    if not rule.batch_a or not rule.batch_b:
+        return jsonify({'success': False, 'error': 'Both batch names required'}), 400
+
+    db.session.add(rule)
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@admin_bp.route('/api/config/overlap/delete', methods=['POST'])
+@admin_required
+def api_config_overlap_delete():
+    """Delete a batch overlap rule."""
+    data = request.get_json()
+    rule = BatchOverlapRule.query.get(data.get('rule_id'))
+    if rule:
+        db.session.delete(rule)
+        db.session.commit()
+    return jsonify({'success': True})
+
+
+# ─── ADMIN SLOT OVERRIDE ────────────────────────────────────
+@admin_bp.route('/api/course/change-slot', methods=['POST'])
+@admin_required
+def api_change_course_slot():
+    """Admin overrides a course's slot assignment."""
+    from services.scheduler import change_course_slot
+
+    data = request.get_json()
+    slot_course_id = data.get('slot_course_id')
+    new_slot_id = data.get('new_slot_id')
+
+    active = Semester.query.filter_by(is_active=True).first()
+    if not active:
+        return jsonify({'success': False, 'error': 'No active semester'}), 400
+
+    result = change_course_slot(slot_course_id, new_slot_id, active.id)
+    return jsonify(result)
+
+
+# ─── ICS DOWNLOAD (Admin for any faculty) ────────────────────
+@admin_bp.route('/download-faculty-ics/<int:faculty_id>')
+@admin_required
+def download_faculty_ics(faculty_id):
+    """Admin downloads a specific faculty member's ICS calendar."""
+    from services.ics_generator import generate_faculty_ics
+
+    faculty = Faculty.query.get_or_404(faculty_id)
+
+    try:
+        ics_bytes = generate_faculty_ics(faculty_id)
+    except Exception as e:
+        flash(f'ICS generation failed: {str(e)}', 'error')
+        return redirect(url_for('admin.faculty_list'))
+
+    response = make_response(ics_bytes)
+    response.headers['Content-Type'] = 'text/calendar; charset=utf-8'
+    response.headers['Content-Disposition'] = \
+        f'attachment; filename=Timetable_{faculty.abbreviation}.ics'
+    return response
+
 
