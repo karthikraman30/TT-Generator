@@ -32,7 +32,7 @@ DROP VIEW IF EXISTS v_room_utilization CASCADE;
 CREATE TABLE faculty (
     faculty_id   SERIAL PRIMARY KEY,
     name         VARCHAR(100),
-    short_name   VARCHAR(20) NOT NULL UNIQUE,
+    short_name   VARCHAR(100) NOT NULL UNIQUE,
     department   VARCHAR(100),
     email        VARCHAR(150) UNIQUE,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -47,7 +47,7 @@ COMMENT ON COLUMN faculty.short_name IS 'Unique code used in timetable (e.g., PM
 -- ============================================================================
 CREATE TABLE course (
     course_id    SERIAL PRIMARY KEY,
-    course_code  VARCHAR(20) NOT NULL UNIQUE,
+    course_code  VARCHAR(100) NOT NULL UNIQUE,
     course_name  VARCHAR(150) NOT NULL,
     lecture_hrs  INT DEFAULT 0,
     tutorial_hrs INT DEFAULT 0,
@@ -260,7 +260,7 @@ COMMENT ON COLUMN user_role.password_changed IS 'FALSE = must change password on
 -- ============================================================================
 CREATE TABLE elective_enrollment (
     enrollment_id SERIAL PRIMARY KEY,
-    course_code   VARCHAR(20) NOT NULL,
+    course_code   VARCHAR(100) NOT NULL,
     enrollment    INT NOT NULL DEFAULT 0,
     semester      VARCHAR(20) DEFAULT 'current',
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

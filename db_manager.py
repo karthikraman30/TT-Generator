@@ -890,6 +890,7 @@ class DBManager:
 
         Args:
             filters: Dict with optional keys: day_of_week, sub_batch, faculty, room
+                     Values can be a single string or a list of strings for multi-select.
 
         Returns:
             List of dicts representing timetable rows
@@ -898,18 +899,19 @@ class DBManager:
         params = []
 
         if filters:
-            if filters.get('day_of_week'):
-                query += " AND day_of_week = %s"
-                params.append(filters['day_of_week'])
-            if filters.get('sub_batch'):
-                query += " AND sub_batch = %s"
-                params.append(filters['sub_batch'])
-            if filters.get('faculty'):
-                query += " AND faculty_short_name = %s"
-                params.append(filters['faculty'])
-            if filters.get('room'):
-                query += " AND room_number = %s"
-                params.append(filters['room'])
+            for key, col in [('day_of_week', 'day_of_week'),
+                             ('sub_batch', 'sub_batch'),
+                             ('faculty', 'faculty_short_name'),
+                             ('room', 'room_number')]:
+                val = filters.get(key)
+                if val:
+                    if isinstance(val, list):
+                        placeholders = ','.join(['%s'] * len(val))
+                        query += f" AND {col} IN ({placeholders})"
+                        params.extend(val)
+                    else:
+                        query += f" AND {col} = %s"
+                        params.append(val)
 
         query += " ORDER BY day_of_week, start_time, sub_batch"
 
@@ -972,6 +974,213 @@ class DBManager:
             self.cur.execute(f"SELECT COUNT(*) FROM {table}")
             stats[table] = self.cur.fetchone()[0]
         return stats
+
+    # =========================================================================
+    # CRUD: Faculty
+    # =========================================================================
+
+    def get_all_faculty(self):
+        """Return all faculty rows as list of dicts."""
+        self.cur.execute(
+            "SELECT faculty_id, short_name, name, department, email FROM faculty ORDER BY short_name")
+        columns = [desc[0] for desc in self.cur.description]
+        return [dict(zip(columns, row)) for row in self.cur.fetchall()]
+
+    def add_faculty(self, short_name, name=None, department=None, email=None):
+        """Insert a new faculty member."""
+        self.cur.execute(
+            """INSERT INTO faculty (short_name, name, department, email)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (short_name) DO UPDATE SET
+                   name = COALESCE(EXCLUDED.name, faculty.name),
+                   department = COALESCE(EXCLUDED.department, faculty.department),
+                   email = COALESCE(EXCLUDED.email, faculty.email)
+               RETURNING faculty_id""",
+            (short_name, name, department, email))
+        self.conn.commit()
+        return self.cur.fetchone()[0]
+
+    def update_faculty(self, faculty_id, **kwargs):
+        """Update faculty fields. Accepts short_name, name, department, email."""
+        allowed = {'short_name', 'name', 'department', 'email'}
+        sets = []
+        vals = []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = %s")
+                vals.append(v)
+        if not sets:
+            return
+        vals.append(faculty_id)
+        self.cur.execute(f"UPDATE faculty SET {', '.join(sets)} WHERE faculty_id = %s", vals)
+        self.conn.commit()
+
+    def delete_faculty(self, faculty_id):
+        """Delete a faculty member (cascades to assignments)."""
+        self.cur.execute("DELETE FROM faculty WHERE faculty_id = %s", (faculty_id,))
+        self.conn.commit()
+
+    # =========================================================================
+    # CRUD: Course
+    # =========================================================================
+
+    def get_all_courses(self):
+        """Return all course rows as list of dicts."""
+        self.cur.execute(
+            """SELECT course_id, course_code, course_name, lecture_hrs,
+                      tutorial_hrs, practical_hrs, credits, ltpc, course_type
+               FROM course ORDER BY course_code""")
+        columns = [desc[0] for desc in self.cur.description]
+        return [dict(zip(columns, row)) for row in self.cur.fetchall()]
+
+    def add_course(self, course_code, course_name, ltpc='', course_type='Core',
+                   lecture_hrs=0, tutorial_hrs=0, practical_hrs=0, credits=0):
+        """Insert a new course."""
+        self.cur.execute(
+            """INSERT INTO course (course_code, course_name, lecture_hrs, tutorial_hrs,
+                                  practical_hrs, credits, ltpc, course_type)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (course_code) DO UPDATE SET
+                   course_name = EXCLUDED.course_name, ltpc = EXCLUDED.ltpc,
+                   course_type = EXCLUDED.course_type,
+                   lecture_hrs = EXCLUDED.lecture_hrs, tutorial_hrs = EXCLUDED.tutorial_hrs,
+                   practical_hrs = EXCLUDED.practical_hrs, credits = EXCLUDED.credits
+               RETURNING course_id""",
+            (course_code, course_name, lecture_hrs, tutorial_hrs,
+             practical_hrs, credits, ltpc, course_type))
+        self.conn.commit()
+        return self.cur.fetchone()[0]
+
+    def update_course(self, course_id, **kwargs):
+        """Update course fields."""
+        allowed = {'course_code', 'course_name', 'ltpc', 'course_type',
+                   'lecture_hrs', 'tutorial_hrs', 'practical_hrs', 'credits'}
+        sets = []
+        vals = []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = %s")
+                vals.append(v)
+        if not sets:
+            return
+        vals.append(course_id)
+        self.cur.execute(f"UPDATE course SET {', '.join(sets)} WHERE course_id = %s", vals)
+        self.conn.commit()
+
+    def delete_course(self, course_id):
+        """Delete a course (cascades to assignments and batch maps)."""
+        self.cur.execute("DELETE FROM course WHERE course_id = %s", (course_id,))
+        self.conn.commit()
+
+    # =========================================================================
+    # CRUD: Batch (Student Batch)
+    # =========================================================================
+
+    def get_all_batches(self):
+        """Return all student_batch rows as list of dicts."""
+        self.cur.execute(
+            """SELECT batch_id, program_name, sub_batch, section, headcount
+               FROM student_batch ORDER BY sub_batch, section""")
+        columns = [desc[0] for desc in self.cur.description]
+        return [dict(zip(columns, row)) for row in self.cur.fetchall()]
+
+    def add_batch(self, sub_batch, section='All', program_name='', headcount=0):
+        """Insert a new student batch."""
+        self.cur.execute(
+            """INSERT INTO student_batch (sub_batch, section, program_name, headcount)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (sub_batch, section) DO UPDATE SET
+                   program_name = EXCLUDED.program_name, headcount = EXCLUDED.headcount
+               RETURNING batch_id""",
+            (sub_batch, section, program_name, headcount))
+        self.conn.commit()
+        return self.cur.fetchone()[0]
+
+    def update_batch_fields(self, batch_id, **kwargs):
+        """Update batch fields. Accepts sub_batch, section, program_name, headcount."""
+        allowed = {'sub_batch', 'section', 'program_name', 'headcount'}
+        sets = []
+        vals = []
+        for k, v in kwargs.items():
+            if k in allowed:
+                sets.append(f"{k} = %s")
+                vals.append(v)
+        if not sets:
+            return
+        vals.append(batch_id)
+        self.cur.execute(f"UPDATE student_batch SET {', '.join(sets)} WHERE batch_id = %s", vals)
+        self.conn.commit()
+
+    def delete_batch(self, batch_id):
+        """Delete a student batch (cascades)."""
+        self.cur.execute("DELETE FROM student_batch WHERE batch_id = %s", (batch_id,))
+        self.conn.commit()
+
+    # =========================================================================
+    # Timetable Entry Move (for drag-and-drop)
+    # =========================================================================
+
+    def move_timetable_entries(self, moves):
+        """Move timetable entries to new slots.
+
+        Args:
+            moves: list of dicts with 'timetable_id' and 'new_slot_id'
+
+        Returns:
+            (moved_count, errors)
+        """
+        moved = 0
+        errors = []
+        for m in moves:
+            try:
+                self.cur.execute(
+                    """UPDATE master_timetable
+                       SET slot_id = %s, is_moved = TRUE
+                       WHERE timetable_id = %s""",
+                    (m['new_slot_id'], m['timetable_id']))
+                if self.cur.rowcount > 0:
+                    moved += 1
+            except Exception as e:
+                errors.append(f"Entry {m['timetable_id']}: {e}")
+                self.conn.rollback()
+                return moved, errors
+        self.conn.commit()
+        return moved, errors
+
+    def get_slot_id(self, day_of_week, start_time):
+        """Look up a slot_id by day and start time string (e.g. '08:00')."""
+        self.cur.execute(
+            "SELECT slot_id FROM time_slot WHERE day_of_week = %s AND start_time = %s::time",
+            (day_of_week, start_time))
+        row = self.cur.fetchone()
+        return row[0] if row else None
+
+    # =========================================================================
+    # Snapshot preference map (for warm-start seeding)
+    # =========================================================================
+
+    def get_snapshot_preference_map(self, snapshot_id):
+        """Load a snapshot and return a preference map for warm-starting the CSP solver.
+
+        Returns:
+            dict: {(course_code, sub_batch, section): slot_group}
+        """
+        import json
+        row = self.get_snapshot(snapshot_id)
+        if not row:
+            return {}
+        data = row[8]  # snapshot_data
+        if isinstance(data, str):
+            data = json.loads(data)
+        pref = {}
+        for entry in data:
+            key = (entry.get('course_code', ''),
+                   entry.get('sub_batch', ''),
+                   entry.get('section', ''))
+            sg = entry.get('slot_group', '')
+            if key[0] and sg and sg != 'Slot-Free':
+                pref[key] = sg
+        return pref
 
     # =========================================================================
     # CONNECTION MANAGEMENT

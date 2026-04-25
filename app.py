@@ -706,6 +706,287 @@ tr:hover td { background: var(--bg-card-hover); }
     font-size: 1.2rem;
 }
 
+/* ===== Master Timetable Grid ===== */
+.master-grid {
+    display: grid;
+    grid-template-columns: 110px repeat(5, 1fr);
+    gap: 2px;
+    margin-bottom: 2rem;
+    background: var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+.master-grid .mg-header {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: center;
+    padding: 0.6rem 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.master-grid .mg-time {
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    padding: 0.4rem;
+    font-weight: 600;
+}
+.master-grid .mg-cell {
+    background: var(--bg-card);
+    padding: 0.4rem;
+    min-height: 70px;
+    vertical-align: top;
+    transition: background 0.15s;
+}
+.master-grid .mg-cell:hover {
+    background: var(--bg-card-hover);
+}
+.mg-cell .cell-entry {
+    background: rgba(79, 143, 255, 0.06);
+    border: 1px solid rgba(79, 143, 255, 0.15);
+    border-radius: 6px;
+    padding: 0.35rem 0.45rem;
+    margin-bottom: 3px;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    transition: all 0.15s;
+}
+.mg-cell .cell-entry:last-child { margin-bottom: 0; }
+.mg-cell .cell-entry:hover {
+    border-color: var(--accent-blue);
+    background: rgba(79, 143, 255, 0.12);
+}
+.cell-entry .ce-code {
+    font-weight: 700;
+    color: var(--accent-blue);
+    font-size: 0.78rem;
+}
+.cell-entry .ce-name {
+    color: var(--text-secondary);
+    font-size: 0.66rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+.cell-entry .ce-faculty { color: var(--accent-purple); font-size: 0.68rem; }
+.cell-entry .ce-room { color: var(--accent-green); font-size: 0.68rem; }
+.cell-entry .ce-batch { color: var(--text-muted); font-size: 0.64rem; }
+.cell-entry .ce-type {
+    display: inline-block;
+    padding: 0.05rem 0.35rem;
+    border-radius: 8px;
+    font-size: 0.58rem;
+    font-weight: 600;
+    margin-left: 0.3rem;
+}
+.ce-type-core { background: rgba(6,182,212,0.15); color: var(--accent-cyan); }
+.ce-type-elective { background: rgba(245,158,11,0.15); color: var(--accent-amber); }
+.mg-cell-empty {
+    background: var(--bg-card);
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    opacity: 0.4;
+}
+
+/* ===== Multi-Select Dropdown ===== */
+.multi-select {
+    position: relative;
+    min-width: 180px;
+}
+.ms-trigger {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 38px;
+    flex-wrap: wrap;
+    transition: border-color 0.2s;
+    font-family: 'Inter', sans-serif;
+}
+.ms-trigger:hover, .ms-trigger.active { border-color: var(--accent-blue); }
+.ms-trigger .ms-placeholder { color: var(--text-muted); }
+.ms-pill {
+    background: rgba(79, 143, 255, 0.15);
+    color: var(--accent-blue);
+    padding: 0.1rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.ms-pill .ms-remove { cursor: pointer; font-size: 0.8rem; opacity: 0.7; }
+.ms-pill .ms-remove:hover { opacity: 1; }
+.ms-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    z-index: 200;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0.3rem 0;
+}
+.ms-dropdown.open { display: block; }
+.ms-option {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.1s;
+}
+.ms-option:hover { background: rgba(79, 143, 255, 0.1); }
+.ms-option input[type="checkbox"] { accent-color: var(--accent-blue); }
+
+/* ===== Drag-and-Drop Editor ===== */
+.dnd-grid {
+    display: grid;
+    grid-template-columns: 110px repeat(5, 1fr);
+    gap: 2px;
+    margin-bottom: 1rem;
+    background: var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+.dnd-cell {
+    background: var(--bg-card);
+    padding: 0.4rem;
+    min-height: 80px;
+    transition: all 0.2s;
+}
+.dnd-cell.drag-over {
+    background: rgba(79, 143, 255, 0.15) !important;
+    border: 2px dashed var(--accent-blue);
+}
+.dnd-card {
+    background: rgba(79, 143, 255, 0.08);
+    border: 1px solid rgba(79, 143, 255, 0.2);
+    border-radius: 6px;
+    padding: 0.35rem 0.45rem;
+    margin-bottom: 3px;
+    font-size: 0.72rem;
+    cursor: grab;
+    transition: all 0.15s;
+    user-select: none;
+}
+.dnd-card:active { cursor: grabbing; }
+.dnd-card.dragging { opacity: 0.4; transform: scale(0.95); }
+.dnd-card .dnd-code { font-weight: 700; color: var(--accent-blue); }
+
+/* ===== Pending Changes ===== */
+.pending-changes {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+.pending-item {
+    font-size: 0.82rem;
+    padding: 0.25rem 0;
+    color: var(--text-secondary);
+}
+.pending-item .arrow { color: var(--accent-amber); margin: 0 0.4rem; }
+
+/* ===== Confirmation Modal ===== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal-box h3 { margin-bottom: 0.75rem; font-size: 1.1rem; }
+.modal-box p { color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 1.5rem; line-height: 1.6; }
+.modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+.btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-red);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+}
+.btn-danger:hover { background: rgba(239, 68, 68, 0.3); }
+.btn-confirm {
+    background: var(--gradient-2);
+    color: white;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+}
+.btn-confirm:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(16,185,129,0.3); }
+
+/* ===== View Toggle ===== */
+.view-toggle {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+.view-toggle button {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    padding: 0.4rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+}
+.view-toggle button.active {
+    background: rgba(79, 143, 255, 0.15);
+    color: var(--accent-blue);
+    border-color: var(--accent-blue);
+}
+
 @media (max-width: 768px) {
     nav { padding: 0 1rem; }
     main { padding: 1rem; }
@@ -714,6 +995,8 @@ tr:hover td { background: var(--bg-card-hover); }
     .filter-group { width: 100%; }
     select, input[type="text"] { width: 100%; }
     .schedule-grid { grid-template-columns: 80px repeat(5, 1fr); }
+    .master-grid { grid-template-columns: 80px repeat(5, 1fr); }
+    .dnd-grid { grid-template-columns: 80px repeat(5, 1fr); }
 }
 """
 
@@ -738,6 +1021,7 @@ def build_nav(user, active_page=''):
             ('admin_constraints', 'constraints', 'Constraints'),
             ('admin_violations', 'violations', 'Violations'),
             ('admin_faculty_pdfs', 'pdfs', 'PDFs'),
+            ('admin_data_manager', 'data', 'Data Manager'),
             ('admin_manage_users', 'users', 'Users'),
             ('admin_configuration', 'config', 'Config'),
         ]
@@ -1058,8 +1342,8 @@ def session_login():
                         'error': 'Firebase not configured on server'}), 500
 
     try:
-        # Verify the ID token with Firebase Admin SDK
-        decoded_token = firebase_auth.verify_id_token(id_token)
+        # Verify the ID token with Firebase Admin SDK (allow 60s clock skew)
+        decoded_token = firebase_auth.verify_id_token(id_token, clock_skew_seconds=60)
         uid = decoded_token['uid']
         email = decoded_token.get('email', '')
 
@@ -1103,8 +1387,9 @@ def session_login():
 
         return jsonify({'success': True, 'redirect': redirect_url})
 
-    except firebase_admin.exceptions.InvalidArgumentError:
-        return jsonify({'success': False, 'error': 'Invalid token'}), 401
+    except firebase_admin.exceptions.InvalidArgumentError as e:
+        print(f"Token error: {e}", flush=True)
+        return jsonify({'success': False, 'error': f'Invalid token: {e}'}), 401
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -1383,17 +1668,17 @@ def admin_dashboard():
 @app.route('/admin/timetable')
 @admin_required
 def admin_timetable():
-    selected_day = request.args.get('day', '')
-    selected_batch = request.args.get('batch', '')
-    selected_faculty = request.args.get('faculty', '')
+    selected_days = request.args.getlist('day')
+    selected_batches = request.args.getlist('batch')
+    selected_faculties = request.args.getlist('faculty')
 
     filters = {}
-    if selected_day:
-        filters['day_of_week'] = selected_day
-    if selected_batch:
-        filters['sub_batch'] = selected_batch
-    if selected_faculty:
-        filters['faculty'] = selected_faculty
+    if selected_days:
+        filters['day_of_week'] = selected_days
+    if selected_batches:
+        filters['sub_batch'] = selected_batches
+    if selected_faculties:
+        filters['faculty'] = selected_faculties
 
     db = DBManager(quiet=True)
     try:
@@ -1406,25 +1691,84 @@ def admin_timetable():
     finally:
         db.close()
 
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    days_list = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    periods = ['08:00', '09:00', '10:00', '11:00', '12:00']
+    period_labels = ['8:00 – 8:50', '9:00 – 9:50', '10:00 – 10:50',
+                     '11:00 – 11:50', '12:00 – 12:50']
 
-    # Build filter form
-    day_options = '<option value="">All Days</option>'
-    for d in days:
-        sel = 'selected' if d == selected_day else ''
-        day_options += f'<option value="{d}" {sel}>{d}</option>'
+    # Build schedule dict keyed by (day, time_prefix)
+    schedule = {}
+    for e in entries:
+        day = e.get('day_of_week', '')
+        start = str(e.get('start_time', ''))[:5]
+        key = (day, start)
+        if key not in schedule:
+            schedule[key] = []
+        schedule[key].append(e)
 
-    batch_options = '<option value="">All Batches</option>'
-    for b in batches:
-        sel = 'selected' if b == selected_batch else ''
-        batch_options += f'<option value="{b}" {sel}>{b}</option>'
+    # Build multi-select filter options
+    def ms_options(name, items, selected):
+        opts = ''
+        for item in items:
+            chk = 'checked' if item in selected else ''
+            opts += f'<div class="ms-option"><input type="checkbox" name="{name}" value="{item}" {chk} onchange="submitFilters()"><span>{item}</span></div>'
+        return opts
 
-    fac_options = '<option value="">All Faculty</option>'
-    for f in faculties:
-        sel = 'selected' if f == selected_faculty else ''
-        fac_options += f'<option value="{f}" {sel}>{f}</option>'
+    day_opts = ms_options('day', days_list, selected_days)
+    batch_opts = ms_options('batch', batches, selected_batches)
+    fac_opts = ms_options('faculty', faculties, selected_faculties)
 
-    # Build table rows
+    def ms_pills(selected):
+        if not selected:
+            return '<span class="ms-placeholder">All</span>'
+        return ''.join(f'<span class="ms-pill">{s}<span class="ms-remove" onclick="removePill(this, \'{s}\')">×</span></span>' for s in selected)
+
+    day_pills = ms_pills(selected_days)
+    batch_pills = ms_pills(selected_batches)
+    fac_pills = ms_pills(selected_faculties)
+
+    # Build grid HTML
+    grid_html = '<div class="master-grid">'
+    # Header row
+    grid_html += '<div class="mg-header"></div>'
+    for day in days_list:
+        grid_html += f'<div class="mg-header">{day}</div>'
+
+    # Data rows
+    for p_idx, period in enumerate(periods):
+        grid_html += f'<div class="mg-time">{period_labels[p_idx]}</div>'
+        for day in days_list:
+            cell_entries = schedule.get((day, period), [])
+            if cell_entries:
+                cell_html = ''
+                # Deduplicate by course_code + section to avoid showing same entry multiple times
+                seen = set()
+                for e in cell_entries:
+                    dedup_key = (e.get('course_code',''), e.get('sub_batch',''), e.get('section',''))
+                    if dedup_key in seen:
+                        continue
+                    seen.add(dedup_key)
+                    code = e.get('course_code', '?')
+                    ctype = e.get('course_type', '') or ''
+                    type_cls = 'ce-type-core' if 'core' in ctype.lower() else 'ce-type-elective'
+                    type_short = 'Core' if 'core' in ctype.lower() else 'Elec'
+                    faculty = e.get('faculty_short_name', '') or ''
+                    room = e.get('room_number', '') or '-'
+                    batch = e.get('sub_batch', '')
+                    sec = e.get('section', '')
+                    moved = ' 🔀' if e.get('is_moved') else ''
+                    cell_html += f'''<div class="cell-entry">
+                        <div><span class="ce-code">{code}</span><span class="ce-type {type_cls}">{type_short}</span>{moved}</div>
+                        <div class="ce-faculty">👤 {faculty}</div>
+                        <div class="ce-room">📍 {room}</div>
+                        <div class="ce-batch">{batch} {sec}</div>
+                    </div>'''
+                grid_html += f'<div class="mg-cell">{cell_html}</div>'
+            else:
+                grid_html += '<div class="mg-cell mg-cell-empty">—</div>'
+    grid_html += '</div>'
+
+    # Build detail table rows
     rows_html = ''
     for e in entries:
         course_type = e.get('course_type', '') or ''
@@ -1448,39 +1792,98 @@ def admin_timetable():
     if not entries:
         rows_html = '''<tr><td colspan="11" class="empty-state">
             <div class="icon">📭</div>
-            <p>No timetable entries found. Run the generator with --use-db first.</p>
+            <p>No timetable entries found. Run the generator first.</p>
         </td></tr>'''
 
     content = f'''
     <h1><span class="icon">📅</span>Master Timetable</h1>
     <p class="subtitle">Complete schedule with batch, faculty, and room details</p>
 
-    <form class="filters" method="GET" action="{url_for("admin_timetable")}">
-        <div class="filter-group"><label>Day</label><select name="day">{day_options}</select></div>
-        <div class="filter-group"><label>Batch</label><select name="batch">{batch_options}</select></div>
-        <div class="filter-group"><label>Faculty</label><select name="faculty">{fac_options}</select></div>
+    <form id="filter-form" class="filters" method="GET" action="{url_for("admin_timetable")}">
+        <div class="filter-group">
+            <label>Day</label>
+            <div class="multi-select" id="ms-day">
+                <div class="ms-trigger" onclick="toggleMs('ms-day')">{day_pills}</div>
+                <div class="ms-dropdown" id="ms-day-dd">{day_opts}</div>
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>Batch</label>
+            <div class="multi-select" id="ms-batch">
+                <div class="ms-trigger" onclick="toggleMs('ms-batch')">{batch_pills}</div>
+                <div class="ms-dropdown" id="ms-batch-dd">{batch_opts}</div>
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>Faculty</label>
+            <div class="multi-select" id="ms-faculty">
+                <div class="ms-trigger" onclick="toggleMs('ms-faculty')">{fac_pills}</div>
+                <div class="ms-dropdown" id="ms-faculty-dd">{fac_opts}</div>
+            </div>
+        </div>
         <button type="submit" class="btn">Filter</button>
+        <a href="{url_for("admin_timetable")}" class="btn" style="background:rgba(239,68,68,0.1);color:var(--accent-red);border:1px solid rgba(239,68,68,0.3);">Clear</a>
     </form>
 
-    <div class="table-container">
-        <div class="table-header">
-            <h2>Schedule</h2>
-            <span class="table-count">{len(entries)} entries</span>
-        </div>
-        <div class="table-scroll">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Day</th><th>Time</th><th>Slot</th>
-                        <th>Course Code</th><th>Course Name</th><th>Type</th>
-                        <th>Faculty</th><th>Batch</th><th>Section</th>
-                        <th>Room</th><th>Moved?</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
+    <div class="view-toggle">
+        <button class="active" onclick="showView('grid', this)">📊 Grid View</button>
+        <button onclick="showView('table', this)">📋 List View</button>
+    </div>
+
+    <div id="view-grid">
+        {grid_html}
+    </div>
+
+    <div id="view-table" style="display:none;">
+        <div class="table-container">
+            <div class="table-header">
+                <h2>Schedule</h2>
+                <span class="table-count">{len(entries)} entries</span>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Day</th><th>Time</th><th>Slot</th>
+                            <th>Course Code</th><th>Course Name</th><th>Type</th>
+                            <th>Faculty</th><th>Batch</th><th>Section</th>
+                            <th>Room</th><th>Moved?</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </div>
         </div>
     </div>
+
+    <script>
+    function toggleMs(id) {{
+        var dd = document.getElementById(id + '-dd');
+        var wasOpen = dd.classList.contains('open');
+        document.querySelectorAll('.ms-dropdown').forEach(function(el) {{ el.classList.remove('open'); }});
+        if (!wasOpen) dd.classList.add('open');
+    }}
+    document.addEventListener('click', function(e) {{
+        if (!e.target.closest('.multi-select')) {{
+            document.querySelectorAll('.ms-dropdown').forEach(function(el) {{ el.classList.remove('open'); }});
+        }}
+    }});
+    function submitFilters() {{
+        document.getElementById('filter-form').submit();
+    }}
+    function removePill(el, val) {{
+        var ms = el.closest('.multi-select');
+        var cb = ms.querySelector('input[value="' + val + '"]');
+        if (cb) cb.checked = false;
+        submitFilters();
+    }}
+    function showView(view, btn) {{
+        document.getElementById('view-grid').style.display = view === 'grid' ? 'block' : 'none';
+        document.getElementById('view-table').style.display = view === 'table' ? 'block' : 'none';
+        document.querySelectorAll('.view-toggle button').forEach(function(b) {{ b.classList.remove('active'); }});
+        btn.classList.add('active');
+    }}
+    </script>
     '''
 
     return page_shell('Master Timetable', get_current_user(), 'timetable', content)
@@ -1508,6 +1911,72 @@ def admin_faculty():
         sel = 'selected' if f == selected_faculty else ''
         fac_options += f'<option value="{f}" {sel}>{f}</option>'
 
+    days_list = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    periods = ['08:00', '09:00', '10:00', '11:00', '12:00']
+    period_labels = ['8:00 – 8:50', '9:00 – 9:50', '10:00 – 10:50',
+                     '11:00 – 11:50', '12:00 – 12:50']
+
+    # Build schedule dict keyed by (day, time_prefix)
+    schedule = {}
+    for e in entries:
+        day = e.get('day_of_week', '')
+        start = str(e.get('start_time', ''))[:5]
+        key = (day, start)
+        if key not in schedule:
+            schedule[key] = []
+        schedule[key].append(e)
+
+    # Build grid HTML
+    grid_html = '<div class="master-grid">'
+    # Header row
+    grid_html += '<div class="mg-header"></div>'
+    for day in days_list:
+        grid_html += f'<div class="mg-header">{day}</div>'
+
+    # Data rows
+    for p_idx, period in enumerate(periods):
+        grid_html += f'<div class="mg-time">{period_labels[p_idx]}</div>'
+        for day in days_list:
+            cell_entries = schedule.get((day, period), [])
+            if cell_entries:
+                cell_html = ''
+                # Group by (course_code, faculty) to combine batches
+                grouped = {}
+                for e in cell_entries:
+                    code = e.get('course_code', '?')
+                    fac = e.get('faculty', '')
+                    room = e.get('room_number', '') or '-'
+                    g_key = (code, fac, room)
+                    if g_key not in grouped:
+                        grouped[g_key] = []
+                    
+                    batch_str = f"{e.get('sub_batch', '')}"
+                    sec = e.get('section', '').strip()
+                    sec_clean = sec[4:].strip() if sec.startswith('Sec ') else sec
+                    if sec_clean and sec_clean != 'All':
+                        batch_str += f" (Sec {sec_clean})"
+                    grouped[g_key].append(batch_str)
+                
+                for (code, fac, room), batches in grouped.items():
+                    # Check if it's a core or elective
+                    # (Faculty view might not have course_type, we can just style it generically or check if any original entry has it)
+                    # For simplicity, just use the core style or generic style.
+                    # We'll use a generic faculty class
+                    batches_joined = ', '.join(batches)
+                    fac_display = f"👤 {fac}" if not selected_faculty else "" # Hide faculty name if already filtered for them, or show if ALL
+                    
+                    cell_html += f'''<div class="cell-entry">
+                        <div><span class="ce-code">{code}</span></div>
+                        {f'<div class="ce-faculty">{fac_display}</div>' if fac_display else ''}
+                        <div class="ce-room">📍 {room}</div>
+                        <div class="ce-batch" style="white-space: normal;">{batches_joined}</div>
+                    </div>'''
+                grid_html += f'<div class="mg-cell">{cell_html}</div>'
+            else:
+                grid_html += '<div class="mg-cell mg-cell-empty">—</div>'
+    grid_html += '</div>'
+
+
     rows_html = ''
     for e in entries:
         rows_html += f'''
@@ -1532,28 +2001,52 @@ def admin_faculty():
     <p class="subtitle">Individual teaching schedules for all faculty members</p>
 
     <form class="filters" method="GET" action="{url_for("admin_faculty")}">
-        <div class="filter-group"><label>Faculty</label><select name="faculty">{fac_options}</select></div>
-        <button type="submit" class="btn">Filter</button>
+        <div class="filter-group"><label>Faculty</label>
+        <select name="faculty" onchange="this.form.submit()" style="background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding:0.5rem;border-radius:6px;min-width:200px;">
+        {fac_options}
+        </select>
+        </div>
+        <noscript><button type="submit" class="btn">Filter</button></noscript>
     </form>
 
-    <div class="table-container">
-        <div class="table-header">
-            <h2>Teaching Schedule</h2>
-            <span class="table-count">{len(entries)} sessions</span>
-        </div>
-        <div class="table-scroll">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Faculty</th><th>Day</th><th>Time</th>
-                        <th>Course Code</th><th>Course Name</th>
-                        <th>Batch</th><th>Section</th><th>Room</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
+    <div class="view-toggle">
+        <button class="active" onclick="showView('grid', this)">📊 Grid View</button>
+        <button onclick="showView('table', this)">📋 List View</button>
+    </div>
+
+    <div id="view-grid">
+        {grid_html}
+    </div>
+
+    <div id="view-table" style="display:none;">
+        <div class="table-container">
+            <div class="table-header">
+                <h2>Teaching Schedule</h2>
+                <span class="table-count">{len(entries)} sessions</span>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Faculty</th><th>Day</th><th>Time</th>
+                            <th>Course Code</th><th>Course Name</th>
+                            <th>Batch</th><th>Section</th><th>Room</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </div>
         </div>
     </div>
+    
+    <script>
+    function showView(view, btn) {{
+        document.getElementById('view-grid').style.display = view === 'grid' ? 'block' : 'none';
+        document.getElementById('view-table').style.display = view === 'table' ? 'block' : 'none';
+        document.querySelectorAll('.view-toggle button').forEach(function(b) {{ b.classList.remove('active'); }});
+        btn.classList.add('active');
+    }}
+    </script>
     '''
 
     return page_shell('Faculty Schedule', get_current_user(), 'faculty', content)
@@ -2427,6 +2920,21 @@ def admin_manage_users():
 @admin_required
 def admin_generate():
     """Admin page to upload slot Excel and generate timetable."""
+    # Fetch past snapshots for seed-from-previous dropdown
+    seed_options = ''
+    try:
+        db = DBManager(quiet=True)
+        snapshots = db.list_snapshots()
+        db.close()
+        for s in snapshots:
+            snap_id = s[0]
+            label = s[1] or f'Snapshot #{snap_id}'
+            semester = s[2] or ''
+            snap_date = str(s[3])[:10] if s[3] else ''
+            seed_options += f'<option value="{snap_id}">{label} — {semester} ({snap_date})</option>'
+    except Exception:
+        seed_options = ''
+
     content = f'''
     <h1><span class="icon">🚀</span>Generate Timetable</h1>
     <p class="subtitle">Upload the slot assignment Excel file to generate a new timetable</p>
@@ -2458,12 +2966,35 @@ def admin_generate():
                         <input type="text" id="gen-label" placeholder="e.g. Winter 2025-26 v1" required style="min-width:220px;">
                     </div>
                     <div class="filter-group">
-                        <label>Semester</label>
-                        <input type="text" id="gen-semester" placeholder="e.g. Win 2025-26" style="min-width:180px;">
+                        <label>Year *</label>
+                        <select id="gen-year" style="min-width:110px;">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2027">2027</option>
+                            <option value="2028">2028</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Term *</label>
+                        <select id="gen-term" style="min-width:140px;">
+                            <option value="Winter-Autumn">Winter-Autumn</option>
+                            <option value="Summer">Summer</option>
+                        </select>
                     </div>
                     <div class="filter-group">
                         <label>Notes (optional)</label>
                         <input type="text" id="gen-notes" placeholder="Any notes..." style="min-width:200px;">
+                    </div>
+                </div>
+                <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.5rem;">
+                    <div class="filter-group">
+                        <label>📊 Seed from Previous Semester (optional)</label>
+                        <select id="gen-seed" style="min-width:260px;">
+                            <option value="">— No seeding (fresh generation) —</option>
+                            {seed_options}
+                        </select>
+                        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Uses historical slot assignments to warm-start the solver, reusing past scheduling decisions where possible.</div>
                     </div>
                 </div>
                 <button type="submit" id="gen-btn" class="btn btn-green" style="font-size:1rem;padding:0.6rem 2rem;">
@@ -2524,8 +3055,12 @@ def admin_generate():
         var refFile = document.getElementById('ref-file').files[0];
         if (refFile) formData.append('ref_file', refFile);
         formData.append('label', document.getElementById('gen-label').value);
-        formData.append('semester', document.getElementById('gen-semester').value);
+        var year = document.getElementById('gen-year').value;
+        var term = document.getElementById('gen-term').value;
+        formData.append('semester', year + ' ' + term);
         formData.append('notes', document.getElementById('gen-notes').value);
+        var seedId = document.getElementById('gen-seed').value;
+        if (seedId) formData.append('seed_snapshot_id', seedId);
 
         try {{
             var resp = await fetch('/api/admin/generate', {{
@@ -2626,6 +3161,8 @@ def api_admin_generate():
     label = request.form.get('label', 'Generated Timetable')
     semester = request.form.get('semester', '')
     notes = request.form.get('notes', '')
+    seed_snapshot_id = request.form.get('seed_snapshot_id', '')
+    seed_snapshot_id = int(seed_snapshot_id) if seed_snapshot_id else None
 
     # Output files in uploads dir
     out_base = os.path.splitext(slot_filename)[0]
@@ -2640,6 +3177,7 @@ def api_admin_generate():
             output_xlsx=output_xlsx,
             output_pdf=output_pdf,
             use_db=True,
+            seed_snapshot_id=seed_snapshot_id,
         )
 
         # Auto-save snapshot
@@ -2816,6 +3354,431 @@ def api_history_delete():
     try:
         db.delete_snapshot(data['snapshot_id'])
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Admin Data Manager — CRUD for Faculty, Courses, Batches + Drag-and-Drop Editor
+# ---------------------------------------------------------------------------
+
+@app.route('/admin/data-manager')
+@admin_required
+def admin_data_manager():
+    """Admin page for individual CRUD on Faculty, Courses, Batches, and Schedule Editor."""
+    tab = request.args.get('tab', 'faculty')
+    db = DBManager(quiet=True)
+    try:
+        faculty_list = db.get_all_faculty()
+        course_list = db.get_all_courses()
+        batch_list = db.get_all_batches()
+        all_entries = db.get_master_timetable()
+        all_entries = format_entries(all_entries)
+    finally:
+        db.close()
+
+    # --- Faculty tab ---
+    fac_rows = ''
+    for f in faculty_list:
+        fac_rows += f'''<tr id="fac-{f['faculty_id']}">
+            <td>{f['short_name']}</td>
+            <td><input type="text" value="{f.get('name','') or ''}" class="inline-edit" data-id="{f['faculty_id']}" data-field="name" data-entity="faculty"></td>
+            <td><input type="text" value="{f.get('department','') or ''}" class="inline-edit" data-id="{f['faculty_id']}" data-field="department" data-entity="faculty"></td>
+            <td><input type="text" value="{f.get('email','') or ''}" class="inline-edit" data-id="{f['faculty_id']}" data-field="email" data-entity="faculty"></td>
+            <td><button class="btn-delete" onclick="deleteEntity('faculty',{f['faculty_id']},this)">🗑️</button></td>
+        </tr>'''
+
+    # --- Course tab ---
+    crs_rows = ''
+    for c in course_list:
+        crs_rows += f'''<tr id="crs-{c['course_id']}">
+            <td>{c['course_code']}</td>
+            <td><input type="text" value="{c.get('course_name','') or ''}" class="inline-edit" data-id="{c['course_id']}" data-field="course_name" data-entity="course"></td>
+            <td><input type="text" value="{c.get('ltpc','') or ''}" class="inline-edit" data-id="{c['course_id']}" data-field="ltpc" data-entity="course" style="width:70px;"></td>
+            <td><select class="inline-edit" data-id="{c['course_id']}" data-field="course_type" data-entity="course" style="background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding:0.2rem;border-radius:4px;">
+                <option value="Core" {'selected' if (c.get('course_type','') or '').lower()=='core' else ''}>Core</option>
+                <option value="Elective" {'selected' if 'elec' in (c.get('course_type','') or '').lower() else ''}>Elective</option>
+            </select></td>
+            <td><button class="btn-delete" onclick="deleteEntity('course',{c['course_id']},this)">🗑️</button></td>
+        </tr>'''
+
+    # --- Batch tab ---
+    bat_rows = ''
+    for b in batch_list:
+        bat_rows += f'''<tr id="bat-{b['batch_id']}">
+            <td>{b['sub_batch']}</td>
+            <td>{b['section']}</td>
+            <td><input type="text" value="{b.get('program_name','') or ''}" class="inline-edit" data-id="{b['batch_id']}" data-field="program_name" data-entity="batch"></td>
+            <td><input type="number" value="{b.get('headcount',0)}" class="inline-edit" data-id="{b['batch_id']}" data-field="headcount" data-entity="batch" style="width:70px;"></td>
+            <td><button class="btn-delete" onclick="deleteEntity('batch',{b['batch_id']},this)">🗑️</button></td>
+        </tr>'''
+
+    # --- Schedule Editor grid ---
+    days_list = ['Monday','Tuesday','Wednesday','Thursday','Friday']
+    periods = ['08:00','09:00','10:00','11:00','12:00']
+    period_labels = ['8:00–8:50','9:00–9:50','10:00–10:50','11:00–11:50','12:00–12:50']
+    sched = {}
+    for e in all_entries:
+        day = e.get('day_of_week','')
+        start = str(e.get('start_time',''))[:5]
+        sched.setdefault((day, start), []).append(e)
+
+    dnd_html = '<div class="dnd-grid"><div class="mg-header"></div>'
+    for day in days_list:
+        dnd_html += f'<div class="mg-header">{day}</div>'
+    for pi, period in enumerate(periods):
+        dnd_html += f'<div class="mg-time">{period_labels[pi]}</div>'
+        for day in days_list:
+            cell_id = f"cell-{day}-{period.replace(':','-')}"
+            entries_in_cell = sched.get((day, period), [])
+            cards = ''
+            seen = set()
+            for e in entries_in_cell:
+                dk = (e.get('course_code',''), e.get('sub_batch',''), e.get('section',''))
+                if dk in seen: continue
+                seen.add(dk)
+                tid = e.get('timetable_id', 0)
+                code = e.get('course_code','?')
+                fac = e.get('faculty_short_name','') or ''
+                room = e.get('room_number','') or '-'
+                batch = e.get('sub_batch','')
+                cards += f'<div class="dnd-card" draggable="true" data-tid="{tid}" data-code="{code}" data-day="{day}" data-time="{period}" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)"><span class="dnd-code">{code}</span> · {fac}<br><small>{batch} · {room}</small></div>'
+            dnd_html += f'<div class="dnd-cell" id="{cell_id}" data-day="{day}" data-time="{period}" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">{cards}</div>'
+    dnd_html += '</div>'
+
+    tab_active = lambda t: 'active' if tab == t else ''
+
+    content = f'''
+    <h1><span class="icon">🗄️</span>Data Manager</h1>
+    <p class="subtitle">Add, edit, or delete individual records — no Excel upload needed</p>
+
+    <div class="view-toggle" style="margin-bottom:1.5rem;">
+        <button class="{tab_active('faculty')}" onclick="location.href='?tab=faculty'">👤 Faculty</button>
+        <button class="{tab_active('courses')}" onclick="location.href='?tab=courses'">📚 Courses</button>
+        <button class="{tab_active('batches')}" onclick="location.href='?tab=batches'">🎓 Batches</button>
+        <button class="{tab_active('editor')}" onclick="location.href='?tab=editor'">✏️ Schedule Editor</button>
+    </div>
+
+    <div id="tab-faculty" style="display:{'block' if tab=='faculty' else 'none'};">
+        <div class="table-container">
+            <div class="table-header"><h2>Faculty</h2><span class="table-count">{len(faculty_list)} records</span></div>
+            <div style="padding:1rem;">
+                <form onsubmit="addEntity(event,'faculty')" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+                    <input type="text" id="add-fac-short" placeholder="Short Name *" required style="width:100px;">
+                    <input type="text" id="add-fac-name" placeholder="Full Name" style="width:150px;">
+                    <input type="text" id="add-fac-dept" placeholder="Department" style="width:120px;">
+                    <input type="text" id="add-fac-email" placeholder="Email" style="width:180px;">
+                    <button type="submit" class="btn">+ Add</button>
+                </form>
+            </div>
+            <div class="table-scroll"><table><thead><tr><th>Short Name</th><th>Full Name</th><th>Department</th><th>Email</th><th></th></tr></thead><tbody>{fac_rows}</tbody></table></div>
+        </div>
+    </div>
+
+    <div id="tab-courses" style="display:{'block' if tab=='courses' else 'none'};">
+        <div class="table-container">
+            <div class="table-header"><h2>Courses</h2><span class="table-count">{len(course_list)} records</span></div>
+            <div style="padding:1rem;">
+                <form onsubmit="addEntity(event,'course')" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+                    <input type="text" id="add-crs-code" placeholder="Course Code *" required style="width:100px;">
+                    <input type="text" id="add-crs-name" placeholder="Course Name *" required style="width:180px;">
+                    <input type="text" id="add-crs-ltpc" placeholder="L-T-P-C" style="width:80px;">
+                    <select id="add-crs-type" style="background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding:0.4rem;border-radius:6px;">
+                        <option value="Core">Core</option><option value="Elective">Elective</option>
+                    </select>
+                    <button type="submit" class="btn">+ Add</button>
+                </form>
+            </div>
+            <div class="table-scroll"><table><thead><tr><th>Code</th><th>Name</th><th>L-T-P-C</th><th>Type</th><th></th></tr></thead><tbody>{crs_rows}</tbody></table></div>
+        </div>
+    </div>
+
+    <div id="tab-batches" style="display:{'block' if tab=='batches' else 'none'};">
+        <div class="table-container">
+            <div class="table-header"><h2>Student Batches</h2><span class="table-count">{len(batch_list)} records</span></div>
+            <div style="padding:1rem;">
+                <form onsubmit="addEntity(event,'batch')" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+                    <input type="text" id="add-bat-sub" placeholder="Sub Batch *" required style="width:100px;">
+                    <input type="text" id="add-bat-sec" placeholder="Section" value="All" style="width:80px;">
+                    <input type="text" id="add-bat-prog" placeholder="Program" style="width:120px;">
+                    <input type="number" id="add-bat-hc" placeholder="Headcount" value="0" style="width:90px;">
+                    <button type="submit" class="btn">+ Add</button>
+                </form>
+            </div>
+            <div class="table-scroll"><table><thead><tr><th>Sub Batch</th><th>Section</th><th>Program</th><th>Headcount</th><th></th></tr></thead><tbody>{bat_rows}</tbody></table></div>
+        </div>
+    </div>
+
+    <div id="tab-editor" style="display:{'block' if tab=='editor' else 'none'};">
+        <div class="table-container">
+            <div class="table-header"><h2>✏️ Schedule Editor</h2><span class="table-count">Drag courses to rearrange</span></div>
+            <div style="padding:1rem;">
+                <div id="pending-box" class="pending-changes" style="display:none;">
+                    <strong style="color:var(--accent-amber);">⏳ Pending Changes:</strong>
+                    <div id="pending-list"></div>
+                    <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                        <button class="btn-confirm" onclick="showSaveModal()">💾 Save Changes</button>
+                        <button class="btn-danger" onclick="discardChanges()">✖ Discard</button>
+                    </div>
+                </div>
+                {dnd_html}
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Confirmation Modal -->
+    <div class="modal-overlay" id="save-modal">
+        <div class="modal-box">
+            <h3>⚠️ Confirm Schedule Changes</h3>
+            <p>Moving courses may cause scheduling conflicts such as room double-booking or faculty clashes. The system will not automatically validate these changes.<br><br>Are you sure you want to save?</p>
+            <div class="modal-actions">
+                <button class="btn-danger" onclick="closeSaveModal()">Cancel</button>
+                <button class="btn-confirm" onclick="saveChanges()">Yes, Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // --- Inline Edit ---
+    document.querySelectorAll('.inline-edit').forEach(function(el) {{
+        el.addEventListener('change', function() {{
+            var entity = this.dataset.entity;
+            var id = this.dataset.id;
+            var field = this.dataset.field;
+            var value = this.value;
+            fetch('/api/admin/data/' + entity + '/update', {{
+                method: 'POST',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{id: parseInt(id), field: field, value: value}})
+            }}).then(r => r.json()).then(d => {{
+                if (!d.success) alert('Update failed: ' + d.error);
+            }});
+        }});
+    }});
+
+    // --- Add Entity ---
+    function addEntity(e, type) {{
+        e.preventDefault();
+        var body = {{}};
+        if (type === 'faculty') {{
+            body = {{short_name: document.getElementById('add-fac-short').value, name: document.getElementById('add-fac-name').value, department: document.getElementById('add-fac-dept').value, email: document.getElementById('add-fac-email').value}};
+        }} else if (type === 'course') {{
+            body = {{course_code: document.getElementById('add-crs-code').value, course_name: document.getElementById('add-crs-name').value, ltpc: document.getElementById('add-crs-ltpc').value, course_type: document.getElementById('add-crs-type').value}};
+        }} else if (type === 'batch') {{
+            body = {{sub_batch: document.getElementById('add-bat-sub').value, section: document.getElementById('add-bat-sec').value, program_name: document.getElementById('add-bat-prog').value, headcount: parseInt(document.getElementById('add-bat-hc').value) || 0}};
+        }}
+        fetch('/api/admin/data/' + type + '/add', {{
+            method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify(body)
+        }}).then(r => r.json()).then(d => {{
+            if (d.success) location.reload();
+            else alert('Add failed: ' + d.error);
+        }});
+    }}
+
+    // --- Delete Entity ---
+    function deleteEntity(type, id, btn) {{
+        if (!confirm('Delete this record? Related timetable entries may also be removed.')) return;
+        btn.disabled = true;
+        fetch('/api/admin/data/' + type + '/delete', {{
+            method: 'POST', headers: {{'Content-Type': 'application/json'}}, body: JSON.stringify({{id: id}})
+        }}).then(r => r.json()).then(d => {{
+            if (d.success) location.reload();
+            else {{ alert('Delete failed: ' + d.error); btn.disabled = false; }}
+        }});
+    }}
+
+    // --- Drag and Drop ---
+    var pendingMoves = [];
+    function onDragStart(e) {{
+        e.dataTransfer.setData('text/plain', JSON.stringify({{tid: e.target.dataset.tid, code: e.target.dataset.code, day: e.target.dataset.day, time: e.target.dataset.time}}));
+        e.target.classList.add('dragging');
+    }}
+    function onDragEnd(e) {{ e.target.classList.remove('dragging'); }}
+    function onDragOver(e) {{ e.preventDefault(); e.currentTarget.classList.add('drag-over'); }}
+    function onDragLeave(e) {{ e.currentTarget.classList.remove('drag-over'); }}
+    function onDrop(e) {{
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        var src = JSON.parse(e.dataTransfer.getData('text/plain'));
+        var destDay = e.currentTarget.dataset.day;
+        var destTime = e.currentTarget.dataset.time;
+        if (src.day === destDay && src.time === destTime) return;
+        // Move card visually
+        var card = document.querySelector('[data-tid="' + src.tid + '"]');
+        if (card) {{
+            card.dataset.day = destDay;
+            card.dataset.time = destTime;
+            e.currentTarget.appendChild(card);
+        }}
+        pendingMoves.push({{timetable_id: parseInt(src.tid), code: src.code, from_day: src.day, from_time: src.time, to_day: destDay, to_time: destTime}});
+        renderPending();
+    }}
+    function renderPending() {{
+        var box = document.getElementById('pending-box');
+        var list = document.getElementById('pending-list');
+        if (pendingMoves.length === 0) {{ box.style.display = 'none'; return; }}
+        box.style.display = 'block';
+        list.innerHTML = pendingMoves.map(function(m) {{
+            return '<div class="pending-item"><strong>' + m.code + '</strong>: ' + m.from_day + ' ' + m.from_time + ' <span class="arrow">→</span> ' + m.to_day + ' ' + m.to_time + '</div>';
+        }}).join('');
+    }}
+    function discardChanges() {{ pendingMoves = []; renderPending(); location.reload(); }}
+    function showSaveModal() {{ document.getElementById('save-modal').classList.add('show'); }}
+    function closeSaveModal() {{ document.getElementById('save-modal').classList.remove('show'); }}
+    function saveChanges() {{
+        closeSaveModal();
+        fetch('/api/admin/move-entries', {{
+            method: 'POST', headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify({{moves: pendingMoves}})
+        }}).then(r => r.json()).then(d => {{
+            if (d.success) {{ alert('Saved ' + d.moved + ' change(s).'); location.reload(); }}
+            else alert('Save failed: ' + (d.error || d.errors.join(', ')));
+        }});
+    }}
+    </script>
+    '''
+    return page_shell('Data Manager', get_current_user(), 'data', content)
+
+
+# --- Data Manager API Endpoints ---
+
+@app.route('/api/admin/data/faculty/add', methods=['POST'])
+@admin_required
+def api_data_faculty_add():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        fid = db.add_faculty(data['short_name'], data.get('name'), data.get('department'), data.get('email'))
+        return jsonify({'success': True, 'id': fid})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/faculty/update', methods=['POST'])
+@admin_required
+def api_data_faculty_update():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.update_faculty(data['id'], **{data['field']: data['value']})
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/faculty/delete', methods=['POST'])
+@admin_required
+def api_data_faculty_delete():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.delete_faculty(data['id'])
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/course/add', methods=['POST'])
+@admin_required
+def api_data_course_add():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        cid = db.add_course(data['course_code'], data['course_name'], data.get('ltpc',''), data.get('course_type','Core'))
+        return jsonify({'success': True, 'id': cid})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/course/update', methods=['POST'])
+@admin_required
+def api_data_course_update():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.update_course(data['id'], **{data['field']: data['value']})
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/course/delete', methods=['POST'])
+@admin_required
+def api_data_course_delete():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.delete_course(data['id'])
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/batch/add', methods=['POST'])
+@admin_required
+def api_data_batch_add():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        bid = db.add_batch(data['sub_batch'], data.get('section','All'), data.get('program_name',''), data.get('headcount',0))
+        return jsonify({'success': True, 'id': bid})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/batch/update', methods=['POST'])
+@admin_required
+def api_data_batch_update():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.update_batch_fields(data['id'], **{data['field']: data['value']})
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/data/batch/delete', methods=['POST'])
+@admin_required
+def api_data_batch_delete():
+    data = request.get_json()
+    db = DBManager(quiet=True)
+    try:
+        db.delete_batch(data['id'])
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        db.close()
+
+@app.route('/api/admin/move-entries', methods=['POST'])
+@admin_required
+def api_move_entries():
+    """Batch move timetable entries to new slots (drag-and-drop save)."""
+    data = request.get_json()
+    moves_raw = data.get('moves', [])
+    db = DBManager(quiet=True)
+    try:
+        moves = []
+        for m in moves_raw:
+            slot_id = db.get_slot_id(m['to_day'], m['to_time'])
+            if not slot_id:
+                return jsonify({'success': False, 'error': f"No slot found for {m['to_day']} {m['to_time']}"}), 400
+            moves.append({'timetable_id': m['timetable_id'], 'new_slot_id': slot_id})
+        moved, errors = db.move_timetable_entries(moves)
+        if errors:
+            return jsonify({'success': False, 'errors': errors})
+        return jsonify({'success': True, 'moved': moved})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:

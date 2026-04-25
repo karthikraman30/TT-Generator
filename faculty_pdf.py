@@ -119,19 +119,34 @@ def generate_faculty_pdf(db, faculty_short_name):
         for day in DAYS:
             cell_entries = schedule.get((day, hour_key), [])
             if cell_entries:
-                lines = []
+                grouped = {}
                 for e in cell_entries:
                     code = e.get('course_code', '?')
                     room = e.get('room_number', '-') or '-'
+                    g_key = (code, room)
+                    if g_key not in grouped:
+                        grouped[g_key] = []
+                    
                     batch = e.get('sub_batch', '')
-                    sec = e.get('section', '')
+                    sec = e.get('section', '').strip()
+                    sec_clean = sec[4:].strip() if sec.startswith('Sec ') else sec
+
                     batch_short = batch.replace('BTech Sem-II ', '').replace(
                         'BTech Sem-IV ', '').replace('BTech Sem-VI ', '')
+                    batch_str = f"{batch_short}"
+                    if sec_clean and sec_clean != 'All':
+                        batch_str += f" (Sec {sec_clean})"
+                    
+                    grouped[g_key].append(batch_str)
+                
+                lines = []
+                for (code, room), batches in grouped.items():
+                    batches_joined = ', '.join(batches)
                     lines.append(
-                        f'<b>{code}</b><br/>'
-                        f'{room} | {batch_short} {sec}'
+                        f'<b>{code}</b> | {room}<br/>'
+                        f'{batches_joined}'
                     )
-                cell_text = '<br/>'.join(lines)
+                cell_text = '<br/><br/>'.join(lines)
             else:
                 cell_text = '<font color="#aaaaaa">—</font>'
             row.append(make_para(cell_text))

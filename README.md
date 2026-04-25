@@ -83,10 +83,15 @@ psql -U postgres -c "CREATE DATABASE timetable_generator_db;"
 ```
 *(Enter your PostgreSQL password when prompted)*
 
-> **Windows:** If `psql` is not found, use the full path:
-> ```cmd
-> "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -c "CREATE DATABASE timetable_generator_db;"
-> ```
+> **Windows:**
+> - If `psql` is not found, use the full path and the PowerShell call operator:
+>   ```powershell
+>   & "C:\Program Files\PostgreSQL\$(Number)\bin\psql.exe" -U postgres -c "CREATE DATABASE timetable_generator_db;"
+>   ```
+> - If using Command Prompt (cmd.exe), you can use:
+>   ```cmd
+>   "C:\Program Files\PostgreSQL\$(Number)\bin\psql.exe" -U postgres -c "CREATE DATABASE timetable_generator_db;"
+>   ```
 
 ---
 
