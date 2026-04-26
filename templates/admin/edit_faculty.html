@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Edit Faculty — Timetable Generator{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Edit Faculty Member</h1>
+    <a href="{{ url_for('admin.faculty_list') }}" class="btn btn-secondary">← Back to Faculty List</a>
+</div>
+
+<div class="card">
+    <h2>Edit: {{ faculty.full_name }}</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="full_name">Full Name *</label>
+            <input type="text" id="full_name" name="full_name" value="{{ faculty.full_name }}" required>
+            <small>Full proper name (e.g., "Dr. John Smith")</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="abbreviation">Abbreviation *</label>
+            <input type="text" id="abbreviation" name="abbreviation" value="{{ faculty.abbreviation }}" required maxlength="50">
+            <small>Short code (e.g., "JS", "JDS")</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" value="{{ faculty.email or '' }}">
+            <small>
+                {% if faculty.firebase_uid %}
+                    ✅ Firebase account exists. Changing email will NOT affect existing account.
+                {% else %}
+                    Add email to create login account. Leave empty for no login access.
+                {% endif %}
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="role">Role</label>
+            <select id="role" name="role">
+                <option value="faculty" {% if faculty.role == 'faculty' %}selected{% endif %}>Faculty</option>
+                <option value="admin" {% if faculty.role == 'admin' %}selected{% endif %}>Admin</option>
+            </select>
+            <small>Admin role grants access to admin panel</small>
+        </div>
+        
+        {% if faculty.firebase_uid %}
+        <div class="info-box">
+            <strong>Firebase Account:</strong> ✅ Linked<br>
+            <strong>UID:</strong> {{ faculty.firebase_uid }}<br>
+            <strong>Must Reset Password:</strong> {{ 'Yes' if faculty.must_reset_password else 'No' }}
+        </div>
+        {% endif %}
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+            <a href="{{ url_for('admin.faculty_list') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<style>
+.info-box {
+    background: #f0f8ff;
+    border: 1px solid #b0d4f1;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+</style>
+{% endblock %}
