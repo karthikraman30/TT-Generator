@@ -35,7 +35,7 @@
     <div class="card-header"><span class="card-title">All Faculty ({{ faculty|length }})</span></div>
     <div class="table-wrapper">
         <table>
-            <thead><tr><th>Name</th><th>Abbr.</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Name</th><th>Abbr.</th><th>Email</th><th>Role</th><th>Account Status</th><th>Actions</th></tr></thead>
             <tbody>
             {% for f in faculty %}
             <tr>
@@ -44,17 +44,62 @@
                 <td>{{ f.email or '—' }}</td>
                 <td><span class="badge {% if f.role == 'admin' %}badge-warning{% else %}badge-info{% endif %}">{{ f.role }}</span></td>
                 <td>
+                    {% if not f.email %}
+                        <span class="badge badge-secondary">No Email</span>
+                    {% elif not f.firebase_uid %}
+                        <span class="badge badge-danger">🔴 Not Set</span>
+                        <form action="{{ url_for('admin.setup_faculty_account', fac_id=f.id) }}" method="POST" style="display:inline;margin-top:0.25rem;">
+                            <button type="submit" class="btn btn-xs btn-primary">Set Account</button>
+                        </form>
+                    {% elif f.must_reset_password %}
+                        <span class="badge badge-warning">🟡 Pending Reset</span>
+                        <form action="{{ url_for('admin.setup_faculty_account', fac_id=f.id) }}" method="POST" style="display:inline;margin-top:0.25rem;">
+                            <button type="submit" class="btn btn-xs btn-secondary" title="Generate new temp password">Reset</button>
+                        </form>
+                    {% else %}
+                        <span class="badge badge-success">✅ Active</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('admin.edit_faculty', fac_id=f.id) }}" class="btn btn-sm btn-secondary" style="margin-right:0.25rem;">Edit</a>
                     <a href="{{ url_for('admin.export_faculty_pdf', fac_id=f.id) }}" class="btn btn-sm btn-info" target="_blank" style="margin-right:0.25rem;">📄 PDF</a>
-                    <form action="{{ url_for('admin.delete_faculty', fac_id=f.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete {{ f.full_name }}?');">
+                    <form action="{{ url_for('admin.delete_faculty', fac_id=f.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete {{ f.full_name }}? This will remove all course assignments!');">
                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                     </form>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">No faculty added yet</div></td></tr>
+            <tr><td colspan="6" class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">No faculty added yet</div></td></tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<style>
+.btn-xs {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.badge-danger {
+    background-color: #dc3545;
+    color: white;
+}
+
+.badge-warning {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.badge-success {
+    background-color: #28a745;
+    color: white;
+}
+
+.badge-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+</style>
 {% endblock %}

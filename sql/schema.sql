@@ -14,15 +14,14 @@ CREATE TABLE IF NOT EXISTS programs (
 );
 
 -- ─── SEMESTERS ───────────────────────────────────────
--- Academic cycle: Winter, Summer, Autumn
+-- Academic cycle with date range
 CREATE TABLE IF NOT EXISTS semesters (
     id              SERIAL PRIMARY KEY,
-    name            VARCHAR(100) NOT NULL,          -- 'Winter 2025-26'
-    academic_year   VARCHAR(20) NOT NULL,           -- '2025-26'
-    season          VARCHAR(20) NOT NULL,           -- 'Winter', 'Summer', 'Autumn'
+    name            VARCHAR(100) NOT NULL UNIQUE,   -- 'Winter 2025-26'
+    start_date      DATE NOT NULL,
+    end_date        DATE NOT NULL,
     is_active       BOOLEAN DEFAULT FALSE,
-    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(academic_year, season)
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ─── BATCHES ─────────────────────────────────────────
@@ -38,15 +37,38 @@ CREATE TABLE IF NOT EXISTS batches (
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ─── BATCH OVERLAP RULES ─────────────────────────────
+-- Defines which batches share students (for conflict checks)
+CREATE TABLE IF NOT EXISTS batch_overlap_rules (
+    id              SERIAL PRIMARY KEY,
+    batch_a         VARCHAR(150) NOT NULL,
+    section_a       VARCHAR(20) NOT NULL DEFAULT 'All',
+    batch_b         VARCHAR(150) NOT NULL,
+    section_b       VARCHAR(20) NOT NULL DEFAULT 'All',
+    description     VARCHAR(300),
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ─── FACULTY ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS faculty (
     id              SERIAL PRIMARY KEY,
     full_name       VARCHAR(200) NOT NULL,
-    abbreviation    VARCHAR(10) NOT NULL UNIQUE,    -- 'PMJ', 'PD', 'RB'
+    abbreviation    VARCHAR(50) NOT NULL UNIQUE,    -- 'PMJ', 'PD', 'RB'
     email           VARCHAR(200) UNIQUE,
     firebase_uid    VARCHAR(200) UNIQUE,
     role            VARCHAR(20) NOT NULL DEFAULT 'faculty',  -- 'admin' or 'faculty'
+    must_reset_password BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ─── FACULTY NAME MAP ────────────────────────────────
+-- Maps faculty abbreviations to full academic names
+CREATE TABLE IF NOT EXISTS faculty_name_maps (
+    id              SERIAL PRIMARY KEY,
+    abbreviation    VARCHAR(50) NOT NULL UNIQUE REFERENCES faculty(abbreviation) ON DELETE CASCADE,
+    full_name       VARCHAR(200) NOT NULL,
+    source          VARCHAR(50) DEFAULT 'Manual',
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ─── ROOMS ───────────────────────────────────────────
@@ -71,9 +93,21 @@ CREATE TABLE IF NOT EXISTS courses (
     practicals_per_week INTEGER NOT NULL DEFAULT 0,     -- P
     credits             NUMERIC(3,1) NOT NULL DEFAULT 0,-- C (can be 4.5)
     course_type         VARCHAR(40) NOT NULL DEFAULT 'Core',  -- 'Core', 'Elective', 'Open', etc.
+    capacity_override   INTEGER,
     semester_id         INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(code, name, semester_id)
+);
+
+-- ─── L-TRIMMING OVERRIDES ───────────────────────────
+-- Admin override for L-value trimming choices
+CREATE TABLE IF NOT EXISTS l_trimming_overrides (
+    id              SERIAL PRIMARY KEY,
+    course_code     VARCHAR(20) NOT NULL,
+    semester_id     INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
+    keep_days       TEXT NOT NULL,                     -- "Monday,Friday"
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(course_code, semester_id)
 );
 
 -- ─── COURSE ↔ BATCH MAPPING ─────────────────────────
@@ -125,6 +159,17 @@ CREATE TABLE IF NOT EXISTS time_slots (
     UNIQUE(day, period)
 );
 
+-- ─── SLOT ↔ TIME BLOCK MAPPING ───────────────────────
+-- Which slot occupies which time block (per semester)
+CREATE TABLE IF NOT EXISTS slot_time_mappings (
+    id              SERIAL PRIMARY KEY,
+    slot_id         INTEGER REFERENCES slots(id) ON DELETE CASCADE NOT NULL,
+    time_slot_id    INTEGER REFERENCES time_slots(id) ON DELETE CASCADE NOT NULL,
+    semester_id     INTEGER REFERENCES semesters(id) ON DELETE CASCADE NOT NULL,
+    UNIQUE(slot_id, time_slot_id),
+    UNIQUE(time_slot_id, semester_id)
+);
+
 -- ─── TIMETABLE ENTRIES ───────────────────────────────
 -- The generated schedule
 CREATE TABLE IF NOT EXISTS timetable_entries (
@@ -137,6 +182,8 @@ CREATE TABLE IF NOT EXISTS timetable_entries (
     semester_id     INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
     is_combined     BOOLEAN DEFAULT FALSE,
     combined_strength INTEGER DEFAULT 0,
+    is_moved        BOOLEAN DEFAULT FALSE,
+    original_slot_group VARCHAR(20),
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -153,6 +200,19 @@ CREATE TABLE IF NOT EXISTS scheduling_violations (
     room_id         INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
     time_slot_id    INTEGER REFERENCES time_slots(id) ON DELETE SET NULL,
     resolved        BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ─── TIMETABLE SNAPSHOTS ─────────────────────────────
+-- Stores full timetable JSON snapshots
+CREATE TABLE IF NOT EXISTS timetable_snapshots (
+    id              SERIAL PRIMARY KEY,
+    label           VARCHAR(100) NOT NULL,
+    semester_id     INTEGER REFERENCES semesters(id) ON DELETE CASCADE,
+    notes           TEXT,
+    entry_count     INTEGER DEFAULT 0,
+    violation_count INTEGER DEFAULT 0,
+    snapshot_data   TEXT NOT NULL,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -289,34 +289,48 @@ def parse_rooms_file(filepath):
 def parse_faculty_mapping(filepath):
     """Parse a faculty mapping file with columns: Full Name, Abbreviation, Email (optional).
     
-    This file is used to map full names to abbreviations already imported
-    from the Slots file. It will only UPDATE existing faculty records,
-    not create new ones.
+    This file is used to create or update faculty records.
+    - If a faculty with the abbreviation exists, it updates their name and email
+    - If not, it creates a new faculty record with role='faculty'
     """
     df = pd.read_csv(filepath) if filepath.endswith('.csv') else pd.read_excel(filepath)
     updated = 0
+    created = 0
     skipped = 0
+    
     for _, row in df.iterrows():
         full_name = str(row.iloc[0]).strip()
         abbr = str(row.iloc[1]).strip().upper()
         email = str(row.iloc[2]).strip() if len(row) > 2 and pd.notna(row.iloc[2]) else None
 
-        if not abbr or abbr == 'NAN':
+        if not abbr or abbr == 'NAN' or not full_name or full_name == 'nan':
+            skipped += 1
             continue
 
         fac = Faculty.query.filter_by(abbreviation=abbr).first()
         if fac:
+            # Update existing faculty
             fac.full_name = full_name
             if email:
                 fac.email = email
             updated += 1
         else:
-            skipped += 1
+            # Create new faculty record
+            new_fac = Faculty(
+                full_name=full_name,
+                abbreviation=abbr,
+                email=email,
+                role='faculty',
+                must_reset_password=False
+            )
+            db.session.add(new_fac)
+            created += 1
 
     db.session.commit()
-    msg = f"{updated} faculty names mapped"
+    
+    msg = f"{created} faculty created, {updated} faculty updated"
     if skipped:
-        msg += f" ({skipped} abbreviations not found in slots — skipped)"
+        msg += f" ({skipped} rows skipped due to missing data)"
     return msg
 
 

@@ -4,12 +4,39 @@ Full CRUD for all entities, file uploads, schedule generation, and violation log
 """
 
 import os
+import secrets
+import string
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, make_response, send_file
 from models import db, Program, Semester, Batch, Faculty, Room, Course, Slot, SlotCourse, \
     CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, TimeSlot
 from routes.auth import admin_required
 
 admin_bp = Blueprint('admin', __name__)
+
+
+def _generate_temp_password(length=12):
+    """Generate a temporary password meeting policy: upper, lower, number, special."""
+    if length < 8:
+        length = 8
+    upper = secrets.choice(string.ascii_uppercase)
+    lower = secrets.choice(string.ascii_lowercase)
+    digit = secrets.choice(string.digits)
+    special = secrets.choice("!@#$%^&*")
+    remaining = [
+        secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*")
+        for _ in range(length - 4)
+    ]
+    chars = [upper, lower, digit, special] + remaining
+    secrets.SystemRandom().shuffle(chars)
+    return ''.join(chars)
+
+
+def _ensure_firebase_admin():
+    import firebase_admin
+    if not firebase_admin._apps:
+        from config import Config
+        cred = firebase_admin.credentials.Certificate(Config.FIREBASE_CREDENTIALS_PATH)
+        firebase_admin.initialize_app(cred)
 
 
 # ─── DASHBOARD ───────────────────────────────────────────────
@@ -187,8 +214,8 @@ def add_faculty():
     email = request.form.get('email', '').strip() or None
     role = request.form.get('role', 'faculty').strip()
 
-    if not all([full_name, abbreviation]):
-        flash('Name and abbreviation are required.', 'error')
+    if not all([full_name, abbreviation, email]):
+        flash('Name, abbreviation, and email are required to create a login account.', 'error')
         return redirect(url_for('admin.faculty_list'))
 
     existing = Faculty.query.filter_by(abbreviation=abbreviation).first()
@@ -196,10 +223,54 @@ def add_faculty():
         flash(f'Abbreviation "{abbreviation}" already exists.', 'error')
         return redirect(url_for('admin.faculty_list'))
 
-    fac = Faculty(full_name=full_name, abbreviation=abbreviation, email=email, role=role)
+    existing_email = Faculty.query.filter_by(email=email).first()
+    if existing_email:
+        flash(f'Email "{email}" already exists.', 'error')
+        return redirect(url_for('admin.faculty_list'))
+
+    temp_password = None
+    firebase_uid = None
+    if email:
+        from firebase_admin import auth as firebase_auth
+        from firebase_admin import exceptions as firebase_exceptions
+
+        try:
+            _ensure_firebase_admin()
+            # Generate password first to ensure it's always set
+            temp_password = _generate_temp_password()
+            
+            try:
+                # Check if user already exists in Firebase
+                user = firebase_auth.get_user_by_email(email)
+                # User exists, update their password
+                user = firebase_auth.update_user(user.uid, password=temp_password)
+            except firebase_auth.UserNotFoundError:
+                # User doesn't exist, create new
+                user = firebase_auth.create_user(email=email, password=temp_password)
+            
+            firebase_uid = user.uid
+        except firebase_exceptions.FirebaseError as exc:
+            flash(f'Firebase error: {exc}', 'error')
+            return redirect(url_for('admin.faculty_list'))
+        except Exception as exc:
+            # Catch any other unexpected errors
+            flash(f'Unexpected error creating Firebase account: {exc}', 'error')
+            return redirect(url_for('admin.faculty_list'))
+
+    fac = Faculty(
+        full_name=full_name,
+        abbreviation=abbreviation,
+        email=email,
+        role=role,
+        firebase_uid=firebase_uid,
+        must_reset_password=bool(temp_password),
+    )
     db.session.add(fac)
     db.session.commit()
-    flash(f'Faculty "{full_name}" added.', 'success')
+    if temp_password:
+        flash(f'Faculty "{full_name}" added. Temporary password: {temp_password}', 'success')
+    else:
+        flash(f'Faculty "{full_name}" added.', 'success')
     return redirect(url_for('admin.faculty_list'))
 
 
@@ -211,6 +282,136 @@ def delete_faculty(fac_id):
     db.session.delete(fac)
     db.session.commit()
     flash(f'Faculty "{fac.full_name}" deleted.', 'success')
+    return redirect(url_for('admin.faculty_list'))
+
+
+@admin_bp.route('/faculty/<int:fac_id>/setup-account', methods=['POST'])
+@admin_required
+def setup_faculty_account(fac_id):
+    """Setup Firebase account for a faculty member (generate temp password)."""
+    fac = Faculty.query.get_or_404(fac_id)
+    
+    if not fac.email:
+        flash('Cannot setup account: Faculty has no email address.', 'error')
+        return redirect(url_for('admin.faculty_list'))
+    
+    if fac.firebase_uid and not fac.must_reset_password:
+        flash(f'{fac.full_name} already has an active account.', 'warning')
+        return redirect(url_for('admin.faculty_list'))
+    
+    from firebase_admin import auth as firebase_auth
+    from firebase_admin import exceptions as firebase_exceptions
+    
+    try:
+        _ensure_firebase_admin()
+        temp_password = _generate_temp_password()
+        
+        if fac.firebase_uid:
+            # Account exists, reset password
+            firebase_auth.update_user(fac.firebase_uid, password=temp_password)
+            action = "reset"
+        else:
+            # Create new account
+            try:
+                user = firebase_auth.get_user_by_email(fac.email)
+                # User exists in Firebase, link it
+                firebase_auth.update_user(user.uid, password=temp_password)
+                fac.firebase_uid = user.uid
+                action = "linked"
+            except firebase_auth.UserNotFoundError:
+                # Create new user
+                user = firebase_auth.create_user(email=fac.email, password=temp_password)
+                fac.firebase_uid = user.uid
+                action = "created"
+        
+        fac.must_reset_password = True
+        db.session.commit()
+        
+        flash(f'Account {action} for {fac.full_name}. Temporary password: {temp_password}', 'success')
+        
+    except firebase_exceptions.FirebaseError as exc:
+        flash(f'Firebase error: {exc}', 'error')
+    except Exception as exc:
+        flash(f'Error: {exc}', 'error')
+    
+    return redirect(url_for('admin.faculty_list'))
+
+
+@admin_bp.route('/faculty/<int:fac_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def edit_faculty(fac_id):
+    """Edit faculty member details."""
+    fac = Faculty.query.get_or_404(fac_id)
+    
+    if request.method == 'GET':
+        return render_template('admin/edit_faculty.html', faculty=fac)
+    
+    # POST - update faculty
+    full_name = request.form.get('full_name', '').strip()
+    abbreviation = request.form.get('abbreviation', '').strip().upper()
+    email = request.form.get('email', '').strip() or None
+    role = request.form.get('role', 'faculty').strip()
+    
+    if not all([full_name, abbreviation]):
+        flash('Name and abbreviation are required.', 'error')
+        return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
+    
+    # Check if abbreviation changed and conflicts with another faculty
+    if abbreviation != fac.abbreviation:
+        existing = Faculty.query.filter_by(abbreviation=abbreviation).first()
+        if existing:
+            flash(f'Abbreviation "{abbreviation}" already exists.', 'error')
+            return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
+    
+    # Check if email changed and conflicts
+    if email and email != fac.email:
+        existing_email = Faculty.query.filter_by(email=email).first()
+        if existing_email and existing_email.id != fac.id:
+            flash(f'Email "{email}" already exists.', 'error')
+            return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
+    
+    # Update basic info
+    fac.full_name = full_name
+    fac.abbreviation = abbreviation
+    fac.role = role
+    
+    # Handle email and Firebase account
+    temp_password = None
+    if email and email != fac.email:
+        # Email added or changed
+        fac.email = email
+        
+        if not fac.firebase_uid:
+            # No Firebase account yet, create one
+            from firebase_admin import auth as firebase_auth
+            from firebase_admin import exceptions as firebase_exceptions
+            
+            try:
+                _ensure_firebase_admin()
+                temp_password = _generate_temp_password()
+                
+                try:
+                    user = firebase_auth.get_user_by_email(email)
+                    # User exists in Firebase, link it
+                    firebase_auth.update_user(user.uid, password=temp_password)
+                    fac.firebase_uid = user.uid
+                except firebase_auth.UserNotFoundError:
+                    # Create new Firebase user
+                    user = firebase_auth.create_user(email=email, password=temp_password)
+                    fac.firebase_uid = user.uid
+                
+                fac.must_reset_password = True
+                
+            except firebase_exceptions.FirebaseError as exc:
+                flash(f'Faculty updated but Firebase error: {exc}', 'warning')
+    
+    db.session.commit()
+    
+    if temp_password:
+        flash(f'Faculty "{full_name}" updated. Temporary password: {temp_password}', 'success')
+    else:
+        flash(f'Faculty "{full_name}" updated successfully.', 'success')
+    
     return redirect(url_for('admin.faculty_list'))
 
 
@@ -681,5 +882,3 @@ def download_faculty_ics(faculty_id):
     response.headers['Content-Disposition'] = \
         f'attachment; filename=Timetable_{faculty.abbreviation}.ics'
     return response
-
-

@@ -88,17 +88,19 @@ class Faculty(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(200), nullable=False)
-    abbreviation = db.Column(db.String(10), nullable=False, unique=True)
+    abbreviation = db.Column(db.String(50), nullable=False, unique=True)
     email = db.Column(db.String(200), unique=True)
     firebase_uid = db.Column(db.String(200), unique=True)
     role = db.Column(db.String(20), nullable=False, default='faculty')
+    must_reset_password = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             'id': self.id, 'full_name': self.full_name,
             'abbreviation': self.abbreviation, 'email': self.email,
-            'role': self.role
+            'role': self.role,
+            'must_reset_password': self.must_reset_password
         }
 
 
@@ -301,8 +303,8 @@ class FacultyNameMap(db.Model):
     __tablename__ = 'faculty_name_maps'
 
     id = db.Column(db.Integer, primary_key=True)
-    abbreviation = db.Column(db.String(10), db.ForeignKey('faculty.abbreviation', ondelete='CASCADE'),
-                             nullable=False, unique=True)
+    abbreviation = db.Column(db.String(50), db.ForeignKey('faculty.abbreviation', ondelete='CASCADE'),
+                              nullable=False, unique=True)
     full_name = db.Column(db.String(200), nullable=False)
     source = db.Column(db.String(50), default='Manual')  # 'Excel', 'Admin UI', 'Manual'
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

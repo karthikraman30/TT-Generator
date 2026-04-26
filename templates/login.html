@@ -23,10 +23,20 @@
         {% endif %}
         {% endwith %}
 
-        <!-- Firebase login button (placeholder — will be wired up with Firebase JS SDK) -->
+        <div class="form-group">
+            <label class="form-label" for="email">Email</label>
+            <input type="email" id="email" placeholder="name@university.edu" required>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input type="password" id="password" placeholder="••••••••" required>
+        </div>
         <button class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="firebaseLoginBtn">
-            🔐 Sign in with Google
+            🔐 Sign in
         </button>
+        <div id="firebaseLoginError" class="flash flash-error" style="margin-top:1rem;display:none;">
+            <span class="flash-text" id="firebaseLoginErrorText"></span>
+        </div>
 
         <div class="login-divider">or dev login</div>
 
@@ -42,4 +52,66 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    const firebaseConfig = {{ firebase_config | tojson }};
+    const loginBtn = document.getElementById('firebaseLoginBtn');
+    const errorBox = document.getElementById('firebaseLoginError');
+    const errorText = document.getElementById('firebaseLoginErrorText');
+
+    function showError(message) {
+        errorText.textContent = message;
+        errorBox.style.display = 'block';
+    }
+
+    if (!firebaseConfig || !firebaseConfig.apiKey) {
+        showError('Firebase is not configured. Set Firebase web config in .env.');
+        loginBtn.disabled = true;
+    } else {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        loginBtn.addEventListener('click', async () => {
+            errorBox.style.display = 'none';
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                showError('Email and password are required.');
+                return;
+            }
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Signing in...';
+
+            try {
+                const userCred = await signInWithEmailAndPassword(auth, email, password);
+                const idToken = await userCred.user.getIdToken();
+
+                const res = await fetch("{{ url_for('auth.verify_token') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idToken })
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Login failed.');
+                }
+
+                window.location.href = data.redirect;
+            } catch (err) {
+                showError(err.message || 'Login failed.');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = '🔐 Sign in';
+            }
+        });
+    }
+</script>
 {% endblock %}
