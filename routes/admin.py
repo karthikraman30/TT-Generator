@@ -123,36 +123,35 @@ def semesters():
 @admin_required
 def add_semester():
     """Create a new semester."""
-    from datetime import date as dt_date
-
-    name = request.form.get('name', '').strip()
-    start_date_str = request.form.get('start_date', '').strip()
-    end_date_str = request.form.get('end_date', '').strip()
-
-    if not all([name, start_date_str, end_date_str]):
-        flash('All fields are required.', 'error')
-        return redirect(url_for('admin.semesters'))
+    from utils.validators import Validators, ValidationError
 
     try:
-        start_date = dt_date.fromisoformat(start_date_str)
-        end_date = dt_date.fromisoformat(end_date_str)
-    except ValueError:
-        flash('Invalid date format. Use YYYY-MM-DD.', 'error')
-        return redirect(url_for('admin.semesters'))
+        # Validate inputs
+        name = Validators.validate_name(request.form.get('name'), 'Semester name', min_length=3, max_length=100)
+        start_date, end_date = Validators.validate_date_range(
+            request.form.get('start_date'),
+            request.form.get('end_date'),
+            'Start date',
+            'End date'
+        )
 
-    if end_date <= start_date:
-        flash('End date must be after start date.', 'error')
-        return redirect(url_for('admin.semesters'))
+        # Check for duplicates
+        existing = Semester.query.filter_by(name=name).first()
+        if existing:
+            flash('A semester with this name already exists.', 'error')
+            return redirect(url_for('admin.semesters'))
 
-    existing = Semester.query.filter_by(name=name).first()
-    if existing:
-        flash('A semester with this name already exists.', 'error')
-        return redirect(url_for('admin.semesters'))
-
-    sem = Semester(name=name, start_date=start_date, end_date=end_date)
-    db.session.add(sem)
-    db.session.commit()
-    flash(f'Semester "{name}" created ({start_date} to {end_date}).', 'success')
+        # Create semester
+        sem = Semester(name=name, start_date=start_date, end_date=end_date)
+        db.session.add(sem)
+        db.session.commit()
+        flash(f'Semester "{name}" created ({start_date} to {end_date}).', 'success')
+        
+    except ValidationError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Error creating semester: {str(e)}', 'error')
+    
     return redirect(url_for('admin.semesters'))
 
 
@@ -181,18 +180,25 @@ def programs():
 @admin_required
 def add_program():
     """Create a new program."""
-    name = request.form.get('name', '').strip()
-    code = request.form.get('code', '').strip()
-    degree_type = request.form.get('degree_type', '').strip()
+    from utils.validators import Validators, ValidationError
 
-    if not all([name, code, degree_type]):
-        flash('All fields are required.', 'error')
-        return redirect(url_for('admin.programs'))
+    try:
+        # Validate inputs
+        name = Validators.validate_name(request.form.get('name'), 'Program name', min_length=3, max_length=100)
+        code = Validators.validate_abbreviation(request.form.get('code'), 'Program code', min_length=2, max_length=30)
+        degree_type = Validators.validate_degree_type(request.form.get('degree_type'))
 
-    prog = Program(name=name, code=code, degree_type=degree_type)
-    db.session.add(prog)
-    db.session.commit()
-    flash(f'Program "{name}" created.', 'success')
+        # Create program
+        prog = Program(name=name, code=code, degree_type=degree_type)
+        db.session.add(prog)
+        db.session.commit()
+        flash(f'Program "{name}" created.', 'success')
+        
+    except ValidationError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Error creating program: {str(e)}', 'error')
+    
     return redirect(url_for('admin.programs'))
 
 
@@ -209,68 +215,78 @@ def faculty_list():
 @admin_required
 def add_faculty():
     """Add a faculty member."""
-    full_name = request.form.get('full_name', '').strip()
-    abbreviation = request.form.get('abbreviation', '').strip().upper()
-    email = request.form.get('email', '').strip() or None
-    role = request.form.get('role', 'faculty').strip()
+    from utils.validators import Validators, ValidationError
 
-    if not all([full_name, abbreviation, email]):
-        flash('Name, abbreviation, and email are required to create a login account.', 'error')
-        return redirect(url_for('admin.faculty_list'))
+    try:
+        # Validate inputs
+        full_name = Validators.validate_name(request.form.get('full_name'), 'Full name', min_length=2, max_length=200)
+        abbreviation = Validators.validate_abbreviation(request.form.get('abbreviation'), 'Abbreviation', min_length=1, max_length=50)
+        email = Validators.validate_email(request.form.get('email'), 'Email', required=True)
+        role = Validators.validate_role(request.form.get('role', 'faculty'))
 
-    existing = Faculty.query.filter_by(abbreviation=abbreviation).first()
-    if existing:
-        flash(f'Abbreviation "{abbreviation}" already exists.', 'error')
-        return redirect(url_for('admin.faculty_list'))
+        # Check for duplicates
+        existing = Faculty.query.filter_by(abbreviation=abbreviation).first()
+        if existing:
+            flash(f'Abbreviation "{abbreviation}" already exists.', 'error')
+            return redirect(url_for('admin.faculty_list'))
 
-    existing_email = Faculty.query.filter_by(email=email).first()
-    if existing_email:
-        flash(f'Email "{email}" already exists.', 'error')
-        return redirect(url_for('admin.faculty_list'))
+        existing_email = Faculty.query.filter_by(email=email).first()
+        if existing_email:
+            flash(f'Email "{email}" already exists.', 'error')
+            return redirect(url_for('admin.faculty_list'))
 
-    temp_password = None
-    firebase_uid = None
-    if email:
-        from firebase_admin import auth as firebase_auth
-        from firebase_admin import exceptions as firebase_exceptions
+        # Create Firebase account
+        temp_password = None
+        firebase_uid = None
+        if email:
+            from firebase_admin import auth as firebase_auth
+            from firebase_admin import exceptions as firebase_exceptions
 
-        try:
-            _ensure_firebase_admin()
-            # Generate password first to ensure it's always set
-            temp_password = _generate_temp_password()
-            
             try:
-                # Check if user already exists in Firebase
-                user = firebase_auth.get_user_by_email(email)
-                # User exists, update their password
-                user = firebase_auth.update_user(user.uid, password=temp_password)
-            except firebase_auth.UserNotFoundError:
-                # User doesn't exist, create new
-                user = firebase_auth.create_user(email=email, password=temp_password)
-            
-            firebase_uid = user.uid
-        except firebase_exceptions.FirebaseError as exc:
-            flash(f'Firebase error: {exc}', 'error')
-            return redirect(url_for('admin.faculty_list'))
-        except Exception as exc:
-            # Catch any other unexpected errors
-            flash(f'Unexpected error creating Firebase account: {exc}', 'error')
-            return redirect(url_for('admin.faculty_list'))
+                _ensure_firebase_admin()
+                # Generate password first to ensure it's always set
+                temp_password = _generate_temp_password()
+                
+                try:
+                    # Check if user already exists in Firebase
+                    user = firebase_auth.get_user_by_email(email)
+                    # User exists, update their password
+                    user = firebase_auth.update_user(user.uid, password=temp_password)
+                except firebase_auth.UserNotFoundError:
+                    # User doesn't exist, create new
+                    user = firebase_auth.create_user(email=email, password=temp_password)
+                
+                firebase_uid = user.uid
+            except firebase_exceptions.FirebaseError as exc:
+                flash(f'Firebase error: {exc}', 'error')
+                return redirect(url_for('admin.faculty_list'))
+            except Exception as exc:
+                # Catch any other unexpected errors
+                flash(f'Unexpected error creating Firebase account: {exc}', 'error')
+                return redirect(url_for('admin.faculty_list'))
 
-    fac = Faculty(
-        full_name=full_name,
-        abbreviation=abbreviation,
-        email=email,
-        role=role,
-        firebase_uid=firebase_uid,
-        must_reset_password=bool(temp_password),
-    )
-    db.session.add(fac)
-    db.session.commit()
-    if temp_password:
-        flash(f'Faculty "{full_name}" added. Temporary password: {temp_password}', 'success')
-    else:
-        flash(f'Faculty "{full_name}" added.', 'success')
+        # Create faculty record
+        fac = Faculty(
+            full_name=full_name,
+            abbreviation=abbreviation,
+            email=email,
+            role=role,
+            firebase_uid=firebase_uid,
+            must_reset_password=bool(temp_password),
+        )
+        db.session.add(fac)
+        db.session.commit()
+        
+        if temp_password:
+            flash(f'Faculty "{full_name}" added. Temporary password: {temp_password}', 'success')
+        else:
+            flash(f'Faculty "{full_name}" added.', 'success')
+            
+    except ValidationError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Error adding faculty: {str(e)}', 'error')
+    
     return redirect(url_for('admin.faculty_list'))
 
 
@@ -341,76 +357,83 @@ def setup_faculty_account(fac_id):
 @admin_required
 def edit_faculty(fac_id):
     """Edit faculty member details."""
+    from utils.validators import Validators, ValidationError
+    
     fac = Faculty.query.get_or_404(fac_id)
     
     if request.method == 'GET':
         return render_template('admin/edit_faculty.html', faculty=fac)
     
     # POST - update faculty
-    full_name = request.form.get('full_name', '').strip()
-    abbreviation = request.form.get('abbreviation', '').strip().upper()
-    email = request.form.get('email', '').strip() or None
-    role = request.form.get('role', 'faculty').strip()
-    
-    if not all([full_name, abbreviation]):
-        flash('Name and abbreviation are required.', 'error')
-        return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
-    
-    # Check if abbreviation changed and conflicts with another faculty
-    if abbreviation != fac.abbreviation:
-        existing = Faculty.query.filter_by(abbreviation=abbreviation).first()
-        if existing:
-            flash(f'Abbreviation "{abbreviation}" already exists.', 'error')
-            return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
-    
-    # Check if email changed and conflicts
-    if email and email != fac.email:
-        existing_email = Faculty.query.filter_by(email=email).first()
-        if existing_email and existing_email.id != fac.id:
-            flash(f'Email "{email}" already exists.', 'error')
-            return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
-    
-    # Update basic info
-    fac.full_name = full_name
-    fac.abbreviation = abbreviation
-    fac.role = role
-    
-    # Handle email and Firebase account
-    temp_password = None
-    if email and email != fac.email:
-        # Email added or changed
-        fac.email = email
+    try:
+        # Validate inputs
+        full_name = Validators.validate_name(request.form.get('full_name'), 'Full name', min_length=2, max_length=200)
+        abbreviation = Validators.validate_abbreviation(request.form.get('abbreviation'), 'Abbreviation', min_length=1, max_length=50)
+        email = Validators.validate_email(request.form.get('email'), 'Email', required=False)
+        role = Validators.validate_role(request.form.get('role', 'faculty'))
         
-        if not fac.firebase_uid:
-            # No Firebase account yet, create one
-            from firebase_admin import auth as firebase_auth
-            from firebase_admin import exceptions as firebase_exceptions
+        # Check if abbreviation changed and conflicts with another faculty
+        if abbreviation != fac.abbreviation:
+            existing = Faculty.query.filter_by(abbreviation=abbreviation).first()
+            if existing:
+                flash(f'Abbreviation "{abbreviation}" already exists.', 'error')
+                return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
+        
+        # Check if email changed and conflicts
+        if email and email != fac.email:
+            existing_email = Faculty.query.filter_by(email=email).first()
+            if existing_email and existing_email.id != fac.id:
+                flash(f'Email "{email}" already exists.', 'error')
+                return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
+        
+        # Update basic info
+        fac.full_name = full_name
+        fac.abbreviation = abbreviation
+        fac.role = role
+        
+        # Handle email and Firebase account
+        temp_password = None
+        if email and email != fac.email:
+            # Email added or changed
+            fac.email = email
             
-            try:
-                _ensure_firebase_admin()
-                temp_password = _generate_temp_password()
+            if not fac.firebase_uid:
+                # No Firebase account yet, create one
+                from firebase_admin import auth as firebase_auth
+                from firebase_admin import exceptions as firebase_exceptions
                 
                 try:
-                    user = firebase_auth.get_user_by_email(email)
-                    # User exists in Firebase, link it
-                    firebase_auth.update_user(user.uid, password=temp_password)
-                    fac.firebase_uid = user.uid
-                except firebase_auth.UserNotFoundError:
-                    # Create new Firebase user
-                    user = firebase_auth.create_user(email=email, password=temp_password)
-                    fac.firebase_uid = user.uid
-                
-                fac.must_reset_password = True
-                
-            except firebase_exceptions.FirebaseError as exc:
-                flash(f'Faculty updated but Firebase error: {exc}', 'warning')
-    
-    db.session.commit()
-    
-    if temp_password:
-        flash(f'Faculty "{full_name}" updated. Temporary password: {temp_password}', 'success')
-    else:
-        flash(f'Faculty "{full_name}" updated successfully.', 'success')
+                    _ensure_firebase_admin()
+                    temp_password = _generate_temp_password()
+                    
+                    try:
+                        user = firebase_auth.get_user_by_email(email)
+                        # User exists in Firebase, link it
+                        firebase_auth.update_user(user.uid, password=temp_password)
+                        fac.firebase_uid = user.uid
+                    except firebase_auth.UserNotFoundError:
+                        # Create new Firebase user
+                        user = firebase_auth.create_user(email=email, password=temp_password)
+                        fac.firebase_uid = user.uid
+                    
+                    fac.must_reset_password = True
+                    
+                except firebase_exceptions.FirebaseError as exc:
+                    flash(f'Faculty updated but Firebase error: {exc}', 'warning')
+        
+        db.session.commit()
+        
+        if temp_password:
+            flash(f'Faculty "{full_name}" updated. Temporary password: {temp_password}', 'success')
+        else:
+            flash(f'Faculty "{full_name}" updated successfully.', 'success')
+        
+    except ValidationError as e:
+        flash(str(e), 'error')
+        return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
+    except Exception as e:
+        flash(f'Error updating faculty: {str(e)}', 'error')
+        return redirect(url_for('admin.edit_faculty', fac_id=fac_id))
     
     return redirect(url_for('admin.faculty_list'))
 
@@ -428,19 +451,26 @@ def rooms():
 @admin_required
 def add_room():
     """Add a room."""
-    name = request.form.get('name', '').strip()
-    capacity = request.form.get('capacity', '0').strip()
-    building = request.form.get('building', '').strip() or None
-    room_type = request.form.get('room_type', 'lecture').strip()
+    from utils.validators import Validators, ValidationError
 
-    if not name or not capacity.isdigit() or int(capacity) <= 0:
-        flash('Valid room name and capacity are required.', 'error')
-        return redirect(url_for('admin.rooms'))
+    try:
+        # Validate inputs
+        name = Validators.validate_name(request.form.get('name'), 'Room name', min_length=1, max_length=50)
+        capacity = Validators.validate_capacity(request.form.get('capacity'), 'Capacity')
+        building = Validators.validate_name(request.form.get('building'), 'Building', min_length=1, max_length=100) if request.form.get('building') else None
+        room_type = Validators.validate_room_type(request.form.get('room_type', 'lecture'))
 
-    room = Room(name=name, capacity=int(capacity), building=building, room_type=room_type)
-    db.session.add(room)
-    db.session.commit()
-    flash(f'Room "{name}" added.', 'success')
+        # Create room
+        room = Room(name=name, capacity=capacity, building=building, room_type=room_type)
+        db.session.add(room)
+        db.session.commit()
+        flash(f'Room "{name}" added.', 'success')
+        
+    except ValidationError as e:
+        flash(str(e), 'error')
+    except Exception as e:
+        flash(f'Error adding room: {str(e)}', 'error')
+    
     return redirect(url_for('admin.rooms'))
 
 
