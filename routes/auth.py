@@ -53,6 +53,15 @@ def login():
     return render_template('login.html', firebase_config=Config.FIREBASE_WEB_CONFIG)
 
 
+@auth_bp.route('/forgot-password', methods=['GET'])
+def forgot_password():
+    """Forgot password page. Firebase handles password reset on the client side."""
+    if 'user' in session:
+        return redirect(url_for('auth.index'))
+    from config import Config
+    return render_template('forgot_password.html', firebase_config=Config.FIREBASE_WEB_CONFIG)
+
+
 @auth_bp.route('/auth/verify-token', methods=['POST'])
 def verify_token():
     """

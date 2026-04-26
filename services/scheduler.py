@@ -24,8 +24,7 @@ from collections import defaultdict
 from itertools import combinations
 
 from models import db, Slot, SlotCourse, Course, TimeSlot, TimetableEntry, \
-    SchedulingViolation, CourseFaculty, CourseBatch, Faculty, Room, \
-    LTrimmingOverride, BatchOverlapRule
+    SchedulingViolation, CourseFaculty, CourseBatch, Faculty, Room
 
 
 # ─── SLOT-TIME MAPPING TABLE ────────────────────────────────
@@ -360,10 +359,9 @@ def generate_entries_from_mappings(semester_id):
     TimetableEntry.query.filter_by(semester_id=semester_id).delete()
     db.session.flush()
 
-    # Load L-trimming overrides
+    # Use automatic L-trimming (most spaced-out days)
+    # No manual overrides - always use automatic selection
     overrides = {}
-    for ov in LTrimmingOverride.query.filter_by(semester_id=semester_id).all():
-        overrides[ov.course_code] = set(ov.keep_days_list)
 
     # Get all slot-course links for this semester
     slot_courses = db.session.query(SlotCourse).join(Slot).filter(
@@ -726,16 +724,17 @@ def assign_rooms(semester_id):
 
 
 def _get_course_student_count(course_id):
-    """Get total student count for a course by summing up all batches enrolled."""
-    from models import CourseBatch, Batch
-
-    batch_links = CourseBatch.query.filter_by(course_id=course_id).all()
-    total = 0
-    for link in batch_links:
-        batch = Batch.query.get(link.batch_id)
-        if batch:
-            total += batch.student_count
-    return total
+    """Get total student count for a course by summing up all batches enrolled.
+    NOTE: student_count column removed from batches table, returning 0 as fallback."""
+    # from models import CourseBatch, Batch
+    # batch_links = CourseBatch.query.filter_by(course_id=course_id).all()
+    # total = 0
+    # for link in batch_links:
+    #     batch = Batch.query.get(link.batch_id)
+    #     if batch:
+    #         total += batch.student_count
+    # return total
+    return 0  # Disabled: student_count column removed
 
 
 # ─── MAIN ENTRY POINT ───────────────────────────────────────

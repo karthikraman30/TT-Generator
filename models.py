@@ -69,15 +69,12 @@ class Batch(db.Model):
     semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id', ondelete='CASCADE'))
     name = db.Column(db.String(150), nullable=False)
     sem_number = db.Column(db.Integer, nullable=False)
-    section = db.Column(db.String(10))
-    student_count = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
             'id': self.id, 'name': self.name,
-            'sem_number': self.sem_number, 'section': self.section,
-            'student_count': self.student_count,
+            'sem_number': self.sem_number,
             'program': self.program.name if self.program else None
         }
 
@@ -112,7 +109,6 @@ class Room(db.Model):
     name = db.Column(db.String(50), nullable=False, unique=True)
     capacity = db.Column(db.Integer, nullable=False)
     building = db.Column(db.String(100))
-    floor = db.Column(db.Integer)
     room_type = db.Column(db.String(20), default='lecture')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -296,101 +292,3 @@ class SchedulingViolation(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
-
-# ─── FACULTY NAME MAP ───────────────────────────────────────
-class FacultyNameMap(db.Model):
-    """Maps faculty abbreviations to full academic names (for PDFs/ICS exports)."""
-    __tablename__ = 'faculty_name_maps'
-
-    id = db.Column(db.Integer, primary_key=True)
-    abbreviation = db.Column(db.String(50), db.ForeignKey('faculty.abbreviation', ondelete='CASCADE'),
-                              nullable=False, unique=True)
-    full_name = db.Column(db.String(200), nullable=False)
-    source = db.Column(db.String(50), default='Manual')  # 'Excel', 'Admin UI', 'Manual'
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    faculty = db.relationship('Faculty', backref=db.backref('name_map', uselist=False))
-
-    def to_dict(self):
-        return {
-            'id': self.id, 'abbreviation': self.abbreviation,
-            'full_name': self.full_name, 'source': self.source
-        }
-
-
-# ─── BATCH OVERLAP RULES ────────────────────────────────────
-class BatchOverlapRule(db.Model):
-    """Defines which student batches share students (e.g., CS-Only ⊆ ICT Sec B).
-    Used by the scheduler for conflict validation instead of hardcoded checks."""
-    __tablename__ = 'batch_overlap_rules'
-
-    id = db.Column(db.Integer, primary_key=True)
-    batch_a = db.Column(db.String(150), nullable=False)
-    section_a = db.Column(db.String(20), nullable=False, default='All')
-    batch_b = db.Column(db.String(150), nullable=False)
-    section_b = db.Column(db.String(20), nullable=False, default='All')
-    description = db.Column(db.String(300))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'batch_a': self.batch_a, 'section_a': self.section_a,
-            'batch_b': self.batch_b, 'section_b': self.section_b,
-            'description': self.description
-        }
-
-
-# ─── L-TRIMMING OVERRIDES ───────────────────────────────────
-class LTrimmingOverride(db.Model):
-    """Admin override for L-value trimming.
-    When a course has fewer lecture hours (L) than its slot provides,
-    the algorithm picks the most spaced-out days by default.
-    This table allows admins to manually choose which days to keep."""
-    __tablename__ = 'l_trimming_overrides'
-    __table_args__ = (db.UniqueConstraint('course_code', 'semester_id'),)
-
-    id = db.Column(db.Integer, primary_key=True)
-    course_code = db.Column(db.String(20), nullable=False)
-    semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id', ondelete='CASCADE'))
-    keep_days = db.Column(db.Text, nullable=False)  # Comma-separated: "Monday,Friday"
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    semester = db.relationship('Semester', backref='l_trimming_overrides')
-
-    @property
-    def keep_days_list(self):
-        """Parse the comma-separated days string into a list."""
-        return [d.strip() for d in self.keep_days.split(',') if d.strip()]
-
-    def to_dict(self):
-        return {
-            'id': self.id, 'course_code': self.course_code,
-            'keep_days': self.keep_days_list,
-            'semester': self.semester.name if self.semester else None
-        }
-
-
-# ─── TIMETABLE SNAPSHOTS ────────────────────────────────────
-class TimetableSnapshot(db.Model):
-    """Stores complete timetable snapshots for versioning and history."""
-    __tablename__ = 'timetable_snapshots'
-
-    id = db.Column(db.Integer, primary_key=True)
-    label = db.Column(db.String(100), nullable=False)
-    semester_id = db.Column(db.Integer, db.ForeignKey('semesters.id', ondelete='CASCADE'))
-    notes = db.Column(db.Text)
-    entry_count = db.Column(db.Integer, default=0)
-    violation_count = db.Column(db.Integer, default=0)
-    snapshot_data = db.Column(db.Text, nullable=False)  # JSON string
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    semester = db.relationship('Semester', backref='snapshots')
-
-    def to_dict(self):
-        return {
-            'id': self.id, 'label': self.label,
-            'entry_count': self.entry_count,
-            'violation_count': self.violation_count,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }

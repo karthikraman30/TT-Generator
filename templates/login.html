@@ -31,25 +31,17 @@
             <label class="form-label" for="password">Password</label>
             <input type="password" id="password" placeholder="••••••••" required>
         </div>
+        <div style="text-align: right; margin-bottom: 1rem;">
+            <a href="{{ url_for('auth.forgot_password') }}" style="color: #6366f1; text-decoration: none; font-size: 0.875rem;">
+                Forgot password?
+            </a>
+        </div>
         <button class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem;" id="firebaseLoginBtn">
             🔐 Sign in
         </button>
         <div id="firebaseLoginError" class="flash flash-error" style="margin-top:1rem;display:none;">
             <span class="flash-text" id="firebaseLoginErrorText"></span>
         </div>
-
-        <div class="login-divider">or dev login</div>
-
-        <!-- Dev login form (for testing without Firebase) -->
-        <form action="{{ url_for('auth.dev_login') }}" method="POST">
-            <div class="form-group">
-                <label class="form-label" for="abbreviation">Faculty Abbreviation</label>
-                <input type="text" id="abbreviation" name="abbreviation" placeholder="e.g. PMJ" required>
-            </div>
-            <button type="submit" class="btn btn-secondary" style="width:100%;justify-content:center;">
-                Dev Login
-            </button>
-        </form>
     </div>
 </div>
 {% endblock %}

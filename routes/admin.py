@@ -660,19 +660,14 @@ def batches():
                            batch_courses=batch_courses, active_semester=active)
 
 
-@admin_bp.route('/batches/<int:batch_id>/update-count', methods=['POST'])
-@admin_required
-def update_batch_count(batch_id):
-    """Update student count for a batch."""
-    batch = Batch.query.get_or_404(batch_id)
-    count = request.form.get('student_count', '0').strip()
-    if count.isdigit():
-        batch.student_count = int(count)
-        db.session.commit()
-        flash(f'Updated {batch.name} to {count} students.', 'success')
-    else:
-        flash('Invalid student count.', 'error')
-    return redirect(url_for('admin.batches'))
+# @admin_bp.route('/batches/<int:batch_id>/update-count', methods=['POST'])
+# @admin_required
+# def update_batch_count(batch_id):
+#     """Update student count for a batch."""
+#     # DISABLED: student_count column removed from database
+#     flash('Student count feature has been disabled.', 'warning')
+#     return redirect(url_for('admin.batches'))
+
 
 
 

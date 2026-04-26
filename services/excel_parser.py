@@ -162,7 +162,6 @@ def _get_or_create_batch(sub_batch_name, batch_group, semester_id):
         name=sub_batch_name,
         sem_number=sem_num,
         semester_id=semester_id,
-        student_count=0,
         program_id=program.id if program else None
     )
     db.session.add(batch)

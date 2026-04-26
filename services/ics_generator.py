@@ -13,7 +13,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from models import db, Faculty, TimetableEntry, TimeSlot, Semester, \
-    FacultyNameMap, CourseBatch, Batch
+    CourseBatch, Batch
 
 
 # ─── CONSTANTS ──────────────────────────────────────────────
@@ -33,14 +33,11 @@ def _get_full_name(faculty):
     if faculty is None:
         return 'Unknown'
 
-    # Check FacultyNameMap first (most reliable)
-    if faculty.name_map and faculty.name_map.full_name:
-        return faculty.name_map.full_name
-
-    # Fall back to the faculty's own full_name
+    # Use faculty's full_name if available
     if faculty.full_name and faculty.full_name != faculty.abbreviation:
         return faculty.full_name
 
+    # Fall back to abbreviation
     return faculty.abbreviation
 
 

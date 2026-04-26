@@ -7,7 +7,7 @@ This script deletes all data but preserves tables and schema.
 from app import create_app
 from models import db, Program, Semester, Batch, Faculty, Room, Course, Slot, \
     SlotCourse, CourseBatch, CourseFaculty, TimetableEntry, SchedulingViolation, \
-    TimeSlot, FacultyNameMap, BatchOverlapRule, LTrimmingOverride, TimetableSnapshot
+    TimeSlot
 from services.scheduler import SlotTimeMapping
 
 def clear_database():
@@ -31,18 +31,6 @@ def clear_database():
         
         try:
             # Delete in reverse order of dependencies
-            print("   Deleting timetable snapshots...")
-            TimetableSnapshot.query.delete()
-            
-            print("   Deleting L-trimming overrides...")
-            LTrimmingOverride.query.delete()
-            
-            print("   Deleting batch overlap rules...")
-            BatchOverlapRule.query.delete()
-            
-            print("   Deleting faculty name maps...")
-            FacultyNameMap.query.delete()
-            
             print("   Deleting scheduling violations...")
             SchedulingViolation.query.delete()
             

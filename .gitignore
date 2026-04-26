@@ -4,3 +4,32 @@ __pycache__/
 *.db
 uploads/
 firebase-credentials.json
+
+# Documentation and summary files (not needed in repo)
+*_SUMMARY.md
+*_EXPLAINED.md
+*_FEATURE.md
+*_QUICK_START.md
+*_QUICK_REFERENCE.md
+*_QUICK_FIX.md
+*_IMPLEMENTATION_SUMMARY.md
+*_ISSUES_AND_SOLUTIONS.md
+DEMO_*.md
+TESTING_GUIDE.md
+VALIDATION_*.md
+REMOVED_*.md
+FINAL_*.md
+SHARED_VS_SEMESTER_DATA.md
+SEMESTER_CONCEPT_EXPLAINED.md
+FIREBASE_*.md
+FIX_*.md
+ACCOUNT_STATUS_FEATURE.md
+
+# Excel files (data files, not code)
+*.xlsx
+
+# PDF files
+*.pdf
+
+# Keep only essential README
+# README.md will be kept
