@@ -121,11 +121,17 @@
         {% if messages %}
         <div class="flash-container">
             {% for category, message in messages %}
-            <div class="flash flash-{{ category }}" data-auto-dismiss>
+            {% set has_password = 'Temporary password:' in message or 'temporary password:' in message %}
+            <div class="flash flash-{{ category }} {% if has_password %}flash-password{% endif %}" {% if not has_password %}data-auto-dismiss{% endif %}>
                 <span class="flash-icon">
                     {% if category == 'success' %}✅{% elif category == 'error' %}❌{% else %}ℹ️{% endif %}
                 </span>
                 <span class="flash-text">{{ message }}</span>
+                {% if has_password %}
+                <button class="btn-copy-password" onclick="copyPasswordFromFlash(this)" title="Copy password to clipboard">
+                    📋 Copy
+                </button>
+                {% endif %}
                 <button class="flash-close" onclick="this.parentElement.remove()">×</button>
             </div>
             {% endfor %}
@@ -138,6 +144,36 @@
             {% block content %}{% endblock %}
         </div>
     </main>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal-overlay" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>🔐 Account Created Successfully</h3>
+            </div>
+            <div class="modal-body">
+                <p class="modal-message" id="modalMessage"></p>
+                <div class="password-display-box">
+                    <label class="form-label">Temporary Password:</label>
+                    <div class="password-copy-group">
+                        <input type="text" id="modalPassword" class="password-input" readonly>
+                        <button class="btn btn-secondary" onclick="copyPasswordFromModal()" title="Copy to clipboard">
+                            📋 Copy
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-warning">
+                    ⚠️ <strong>Important:</strong> Share this password with the faculty member. They must change it on first login.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closePasswordModal()">
+                    ✅ I've Copied It
+                </button>
+            </div>
+        </div>
+    </div>
+
     {% else %}
     <!-- Not logged in – just render the content (login page) -->
     {% block fullpage %}{% endblock %}
